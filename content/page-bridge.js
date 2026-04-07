@@ -516,15 +516,23 @@
         scanForExistingMap();
       }
 
-      // Once we have a map, we can stop most polling
+      // Once we have a map, we can stop polling
       if (map && pollCount > 20) {
         clearInterval(pollTimer);
       }
     }
 
-    if (pollCount > 240) { // 60 seconds
+    // After 60s of fast polling, slow down to every 2s instead of giving up
+    if (pollCount === 240) {
       clearInterval(pollTimer);
-      log('Gave up polling for google.maps');
+      log('Slowing poll for google.maps to every 2s');
+      var slowTimer = setInterval(function () {
+        if (window.google && window.google.maps && window.google.maps.Map) {
+          bootstrap();
+          if (!map) scanForExistingMap();
+          if (map) clearInterval(slowTimer);
+        }
+      }, 2000);
     }
   }, 250);
 })();
