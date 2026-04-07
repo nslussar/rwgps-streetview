@@ -429,6 +429,52 @@
         break;
       }
 
+      case 'REVERSE_GEOCODE': {
+        if (!window.google || !window.google.maps) break;
+        var geocoder = new google.maps.Geocoder();
+        var reqId = msg.requestId;
+        geocoder.geocode(
+          { location: { lat: msg.data.lat, lng: msg.data.lng } },
+          function (results, status) {
+            var streetNumber = '';
+            var streetName = '';
+            var city = '';
+            if (status === 'OK' && results && results.length > 0) {
+              // Extract components from the most specific result
+              for (var i = 0; i < results.length; i++) {
+                var comps = results[i].address_components;
+                for (var j = 0; j < comps.length; j++) {
+                  var types = comps[j].types;
+                  if (!streetNumber && types.indexOf('street_number') !== -1) {
+                    streetNumber = comps[j].long_name;
+                  }
+                  if (!streetName && types.indexOf('route') !== -1) {
+                    streetName = comps[j].long_name;
+                  }
+                  if (!city && types.indexOf('locality') !== -1) {
+                    city = comps[j].long_name;
+                  }
+                }
+                if (streetName) break;
+              }
+            }
+            // Build label: "123 Main St, Portland" or "Main St, Portland" or "Main St"
+            var label = '';
+            if (streetName) {
+              label = streetNumber ? streetNumber + ' ' + streetName : streetName;
+              if (city) label += ', ' + city;
+            }
+            window.postMessage({
+              type: PREFIX + 'RESPONSE',
+              action: 'GEOCODE_RESULT',
+              data: { label: label },
+              requestId: reqId
+            }, '*');
+          }
+        );
+        break;
+      }
+
       case 'PING': {
         window.postMessage({
           type: PREFIX + 'RESPONSE',

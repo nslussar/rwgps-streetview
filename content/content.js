@@ -21,6 +21,9 @@
   let overlayEl = null;
   let overlayImg = null;
   let noCoverageEl = null;
+  let streetLabelEl = null;
+  let lastGeocodedPoint = null;
+  let geocodeCounter = 0;
   let mapContainer = null;
   let bridgeReady = false;
 
@@ -87,8 +90,12 @@
     noCoverageEl.textContent = 'No Street View coverage here';
     noCoverageEl.style.display = 'none';
 
+    streetLabelEl = document.createElement('div');
+    streetLabelEl.className = 'sv-street-label';
+
     overlayEl.appendChild(overlayImg);
     overlayEl.appendChild(noCoverageEl);
+    overlayEl.appendChild(streetLabelEl);
     document.body.appendChild(overlayEl);
   }
 
@@ -109,6 +116,9 @@
             if (!useTrackingMode) {
               handleManualLatLng(msg.data, msg.requestId, msg.zoom);
             }
+            break;
+          case 'GEOCODE_RESULT':
+            handleGeocodeResult(msg.data, msg.requestId);
             break;
           case 'PONG':
             if (msg.data.mapFound) onBridgeReady();
@@ -187,7 +197,32 @@
     console.log('[RWGPS Street View] Attached to map container');
 
     mapContainer.addEventListener('mousemove', onMouseMove);
-    mapContainer.addEventListener('mouseleave', function () {
+    mapContainer.addEventListener('mouseleave', function (event) {
+      // Don't hide if cursor moved to the overlay
+      if (overlayEl.contains(event.relatedTarget)) return;
+      hideOverlay();
+      pendingLatLng = null;
+      clearTimeout(trackingHideTimer);
+      trackingActive = false;
+    });
+
+    // Click on overlay opens Google Maps Street View in a new tab
+    overlayEl.addEventListener('click', function () {
+      if (!lastShownPoint) return;
+      var url = 'https://www.google.com/maps/@'
+        + lastShownPoint.lat.toFixed(6) + ',' + lastShownPoint.lng.toFixed(6)
+        + ',3a,75y,0h,90t/data=!3m4!1e1!3m2!1s!2e0';
+      window.open(url, '_blank');
+    });
+
+    // Forward mousemove from overlay to keep tracking alive
+    overlayEl.addEventListener('mousemove', function (event) {
+      onMouseMove(event);
+    });
+
+    // Hide when cursor leaves the overlay (unless going back to the map)
+    overlayEl.addEventListener('mouseleave', function (event) {
+      if (mapContainer.contains(event.relatedTarget)) return;
       hideOverlay();
       pendingLatLng = null;
       clearTimeout(trackingHideTimer);
@@ -308,11 +343,40 @@
     showOverlay();
   }
 
+  // --- Geocoding ---
+
+  function requestGeocode(lat, lng) {
+    // Only geocode if we've moved >30m from last geocoded point
+    if (lastGeocodedPoint && RwgpsGeo.distanceMeters(lastGeocodedPoint, { lat: lat, lng: lng }) < 30) {
+      return;
+    }
+    lastGeocodedPoint = { lat: lat, lng: lng };
+    var id = ++geocodeCounter;
+    window.postMessage({
+      type: PREFIX + 'REQUEST',
+      action: 'REVERSE_GEOCODE',
+      data: { lat: lat, lng: lng },
+      requestId: id
+    }, '*');
+  }
+
+  function handleGeocodeResult(data, requestId) {
+    if (requestId !== geocodeCounter) return; // stale
+    if (data.label) {
+      streetLabelEl.textContent = data.label;
+      streetLabelEl.style.display = 'block';
+    } else {
+      streetLabelEl.style.display = 'none';
+    }
+  }
+
   // --- Overlay Management ---
 
   var preloadCounter = 0;
 
   function updateStreetViewImage(lat, lng, heading) {
+    requestGeocode(lat, lng);
+
     var url = 'https://maps.googleapis.com/maps/api/streetview'
       + '?size=400x250'
       + '&location=' + lat.toFixed(6) + ',' + lng.toFixed(6)
@@ -367,6 +431,8 @@
   function hideOverlay() {
     overlayEl.style.display = 'none';
     lastShownPoint = null;
+    lastGeocodedPoint = null;
+    streetLabelEl.style.display = 'none';
   }
 
   // --- Start ---
