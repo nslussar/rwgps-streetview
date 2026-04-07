@@ -4,7 +4,7 @@ Chrome extension that shows a Google Street View preview when hovering over a ro
 
 Works when **Google Maps** is selected as the map type in the route editor.
 
-![Street View preview overlay](https://maps.googleapis.com/maps/api/streetview?size=400x250&location=47.8,-122.7&heading=180&pitch=-5&fov=90&key=DEMO)
+![Street View preview overlay](docs/preview.jpg)
 
 ## Install
 
