@@ -22,12 +22,7 @@ jobs:
       - name: Set manifest version from tag
         env:
           TAG_VERSION: ${{ steps.version.outputs.version }}
-        run: python3 -c "
-          import json
-          m = json.load(open('manifest.json'))
-          m['version'] = '$TAG_VERSION'
-          json.dump(m, open('manifest.json', 'w'), indent=2)
-          "
+        run: python3 -c "import json; m=json.load(open('manifest.json')); m['version']='$TAG_VERSION'; json.dump(m,open('manifest.json','w'),indent=2)"
 
       - name: Build zip
         run: make build
