@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <h1>Street View Preview</h1>
+
+  <div class="field">
+    <label for="apiKey">Google Maps API Key</label>
+    <input type="text" id="apiKey" placeholder="AIza..." spellcheck="false" autocomplete="off">
+  </div>
+
+  <div class="field toggle-field">
+    <label for="enabled">Enabled</label>
+    <input type="checkbox" id="enabled" checked>
+  </div>
+
+  <button id="save">Save</button>
+  <div id="status"></div>
+
+  <details class="setup-guide">
+    <summary>How to get an API key</summary>
+    <ol>
+      <li>Go to <a href="https://console.cloud.google.com/apis" target="_blank">Google Cloud Console</a></li>
+      <li>Create a project (or select an existing one)</li>
+      <li>Enable the <strong>Street View Static API</strong></li>
+      <li>Go to <strong>Credentials</strong> &rarr; <strong>Create Credentials</strong> &rarr; <strong>API Key</strong></li>
+      <li>Optionally restrict the key to the Street View Static API</li>
+      <li>Paste the key above and click Save</li>
+    </ol>
+    <p class="note">The Street View Static API has a free tier of $200/month credit (~28,500 requests).</p>
+  </details>
+
+  <script src="popup.js"></script>
+</body>
+</html>

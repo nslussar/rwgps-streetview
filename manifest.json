@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Street View Preview for RideWithGPS",
+  "version": "1.0.0",
+  "description": "Shows a Street View preview overlay when hovering over routes on ridewithgps.com",
+  "permissions": ["storage"],
+  "host_permissions": ["https://ridewithgps.com/*"],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://ridewithgps.com/routes/*"],
+      "js": ["lib/geo.js", "content/content.js"],
+      "css": ["content/overlay.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["content/page-bridge.js"],
+      "matches": ["https://ridewithgps.com/*"]
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
