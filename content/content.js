@@ -81,14 +81,6 @@
 
     overlayImg = document.createElement('img');
     overlayImg.alt = 'Street View preview';
-    overlayImg.addEventListener('error', function () {
-      overlayImg.style.display = 'none';
-      noCoverageEl.style.display = 'flex';
-    });
-    overlayImg.addEventListener('load', function () {
-      overlayImg.style.display = 'block';
-      noCoverageEl.style.display = 'none';
-    });
 
     noCoverageEl = document.createElement('div');
     noCoverageEl.className = 'sv-no-coverage';
@@ -318,6 +310,8 @@
 
   // --- Overlay Management ---
 
+  var preloadCounter = 0;
+
   function updateStreetViewImage(lat, lng, heading) {
     var url = 'https://maps.googleapis.com/maps/api/streetview'
       + '?size=400x250'
@@ -329,8 +323,22 @@
       + '&key=' + encodeURIComponent(apiKey)
       + '&return_error_code=true';
 
-    noCoverageEl.style.display = 'none';
-    overlayImg.src = url;
+    // Preload offscreen so we don't cancel in-flight loads on the visible img.
+    // Only swap the visible src once the preload completes.
+    var id = ++preloadCounter;
+    var preload = new Image();
+    preload.onload = function () {
+      if (id !== preloadCounter) return; // stale
+      overlayImg.src = url;
+      overlayImg.style.display = 'block';
+      noCoverageEl.style.display = 'none';
+    };
+    preload.onerror = function () {
+      if (id !== preloadCounter) return; // stale
+      overlayImg.style.display = 'none';
+      noCoverageEl.style.display = 'flex';
+    };
+    preload.src = url;
   }
 
   function positionOverlay() {
