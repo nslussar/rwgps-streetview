@@ -4,14 +4,14 @@ VERSION := $(shell git describe --tags --exact-match 2>/dev/null | sed 's/^v//' 
 
 build:
 	mkdir -p build
-	rm -f build/ridewithgps-streetview-$(VERSION).zip
-	zip -r build/ridewithgps-streetview-$(VERSION).zip \
+	rm -f build/rwgps-streetview-$(VERSION).zip
+	zip -r build/rwgps-streetview-$(VERSION).zip \
 		manifest.json \
 		content/ \
 		lib/ \
 		popup/ \
 		icons/
-	@echo "Created build/ridewithgps-streetview-$(VERSION).zip"
+	@echo "Created build/rwgps-streetview-$(VERSION).zip"
 
 clean:
 	rm -rf build

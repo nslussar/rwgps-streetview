@@ -9,7 +9,7 @@ Works when **Google Maps** is selected as the map type in the route editor.
 
 ## Install
 
-1. Clone or [download](https://github.com/nslussar/ridewithgps-streetview/archive/refs/heads/main.zip) this repository
+1. Clone or [download](https://github.com/nslussar/rwgps-streetview/archive/refs/heads/main.zip) this repository
 2. Open `chrome://extensions` in Chrome
 3. Enable **Developer mode** (top right toggle)
 4. Click **Load unpacked** and select the repository folder
