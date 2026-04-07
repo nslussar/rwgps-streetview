@@ -1,4 +1,4 @@
-VERSION := $(shell python3 -c "import json; print(json.load(open('manifest.json'))['version'])")
+VERSION := $(shell git describe --tags --exact-match 2>/dev/null | sed 's/^v//' || echo "dev")
 
 .PHONY: build clean
 
