@@ -233,16 +233,23 @@
   function onMouseMove(event) {
     if (!enabled || !apiKey) return;
 
+    var prevX = cursorX;
+    var prevY = cursorY;
     cursorX = event.clientX;
     cursorY = event.clientY;
 
-    // In tracking mode, hide overlay if no TRACKING_POSITION arrives soon
+    // In tracking mode, only start the hide timer if the cursor actually moved.
+    // When stationary, RWGPS stops calling setPosition, but the overlay should stay.
     if (useTrackingMode) {
-      clearTimeout(trackingHideTimer);
-      trackingHideTimer = setTimeout(function () {
-        hideOverlay();
-        trackingActive = false;
-      }, 500);
+      var dx = cursorX - prevX;
+      var dy = cursorY - prevY;
+      if (dx * dx + dy * dy > 4) { // moved more than 2px
+        clearTimeout(trackingHideTimer);
+        trackingHideTimer = setTimeout(function () {
+          hideOverlay();
+          trackingActive = false;
+        }, 500);
+      }
     }
 
     // In manual mode, we need to convert pixel to latlng ourselves.
