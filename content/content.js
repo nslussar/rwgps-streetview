@@ -135,8 +135,14 @@
             handleTrackingPosition(msg.data);
             break;
           case 'TRACKING_LOST':
-            hideOverlay();
-            trackingActive = false;
+            // Don't hide immediately - RWGPS may briefly hide/show the marker.
+            // Let the trackingHideTimer handle it if tracking doesn't resume.
+            if (!trackingHideTimer) {
+              trackingHideTimer = setTimeout(function () {
+                hideOverlay();
+                trackingActive = false;
+              }, 500);
+            }
             break;
         }
       }
@@ -209,7 +215,7 @@
       trackingHideTimer = setTimeout(function () {
         hideOverlay();
         trackingActive = false;
-      }, 200);
+      }, 500);
     }
 
     // In manual mode, we need to convert pixel to latlng ourselves.
