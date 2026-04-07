@@ -1,4 +1,5 @@
-VERSION := $(shell git describe --tags --exact-match 2>/dev/null | sed 's/^v//' || echo "dev")
+VERSION := $(shell git describe --tags --exact-match 2>/dev/null || echo "dev")
+VERSION := $(VERSION:v%=%)
 
 .PHONY: build clean
 
