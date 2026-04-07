@@ -192,6 +192,8 @@
     mapContainer.addEventListener('mouseleave', function () {
       hideOverlay();
       pendingLatLng = null;
+      clearTimeout(trackingHideTimer);
+      trackingActive = false;
     });
   }
 

@@ -140,7 +140,6 @@
     }
 
     // Detect tracking marker: the one whose setPosition is called rapidly (>5 times/sec)
-    if (!markerMoveCounts) return; // already identified
     var now = Date.now();
     var info = markerMoveCounts.get(marker);
     if (!info) {
@@ -154,9 +153,12 @@
     if (now - info.windowStart > 1000) {
       if (info.count > 5) {
         // This marker is being repositioned rapidly - it's the tracking marker
+        if (trackingMarker !== marker) {
+          log('Identified RWGPS tracking marker (moved ' + info.count + ' times/sec)');
+        }
         trackingMarker = marker;
-        markerMoveCounts = null; // no longer needed
-        log('Identified RWGPS tracking marker (moved ' + info.count + ' times/sec)');
+        // Clean up other markers from detection map, keep only this one
+        markerMoveCounts.clear();
 
         throttledTrackingUpdate(latlng);
         return;
