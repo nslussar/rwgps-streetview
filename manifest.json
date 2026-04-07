@@ -5,7 +5,6 @@
   "description": "See Google Street View while planning routes on RideWithGPS. Hover over any route to preview the road ahead.",
   "homepage_url": "https://github.com/nslussar/rwgps-streetview",
   "permissions": ["storage"],
-  "host_permissions": ["https://ridewithgps.com/*"],
   "action": {
     "default_popup": "popup/popup.html",
     "default_icon": {
