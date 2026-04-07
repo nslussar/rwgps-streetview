@@ -28,6 +28,6 @@ The Street View Static API includes $200/month of free usage (~28,500 requests).
 
 ## Usage
 
-1. Open a route in the RideWithGPS route planner
+1. Open a route in the RideWithGPS route planner (works both in route preview & edit modes)
 2. Select **Google Maps** as the map type
 3. Hover near the route line -- a Street View preview appears showing the road ahead
