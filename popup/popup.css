@@ -42,30 +42,6 @@ h1 {
   margin-bottom: 0;
 }
 
-button {
-  background: #4285f4;
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 4px;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-button:hover {
-  background: #3367d6;
-}
-
-#status {
-  margin-top: 8px;
-  font-size: 12px;
-  min-height: 16px;
-}
-
-#status.success {
-  color: #0d8043;
-}
-
 .setup-guide {
   margin-top: 14px;
   border-top: 1px solid #eee;

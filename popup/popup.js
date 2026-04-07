@@ -1,8 +1,6 @@
 document.addEventListener('DOMContentLoaded', function () {
   const apiKeyInput = document.getElementById('apiKey');
   const enabledInput = document.getElementById('enabled');
-  const saveBtn = document.getElementById('save');
-  const statusEl = document.getElementById('status');
 
   // Load saved settings
   chrome.storage.sync.get(['apiKey', 'enabled'], function (result) {
@@ -10,19 +8,16 @@ document.addEventListener('DOMContentLoaded', function () {
     enabledInput.checked = result.enabled !== false;
   });
 
-  saveBtn.addEventListener('click', function () {
-    const apiKey = apiKeyInput.value.trim();
-    const enabled = enabledInput.checked;
-
-    chrome.storage.sync.set({ apiKey: apiKey, enabled: enabled }, function () {
-      statusEl.textContent = 'Saved!';
-      statusEl.className = 'success';
-      setTimeout(function () { statusEl.textContent = ''; }, 2000);
-    });
+  // Auto-save on change
+  var saveTimer = null;
+  apiKeyInput.addEventListener('input', function () {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(function () {
+      chrome.storage.sync.set({ apiKey: apiKeyInput.value.trim() });
+    }, 400);
   });
 
-  // Save on Enter in the input field
-  apiKeyInput.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter') saveBtn.click();
+  enabledInput.addEventListener('change', function () {
+    chrome.storage.sync.set({ enabled: enabledInput.checked });
   });
 });
