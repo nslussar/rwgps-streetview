@@ -1,10 +1,10 @@
-# Street View Preview for RideWithGPS
+# <img src="icons/icon48.png" height="22px"/> Street View Preview for RideWithGPS
 
 Chrome extension that shows a Google Street View preview when hovering over a route in the [RideWithGPS](https://ridewithgps.com) route planner or route viewer.
 
 Works when Google Maps is selected as the map type in the route editor.
 
-<img src="docs/preview.jpg" width="800" alt="Street View preview overlay">
+<img src="docs/preview.jpg" width="800" alt="Street View preview overlay"/>
 
 
 ## Install
