@@ -46,6 +46,11 @@
   let trackingDeactivateTimer = null;
   let lastActiveMode = null; // 'tracking' or 'manual' — for logging transitions
 
+  let markerScreenX = null;
+  let markerScreenY = null;
+  let cursorOnMap = false;
+  let cachedMapRect = null; // cached getBoundingClientRect for mapContainer
+
   // --- Initialization ---
 
   function init() {
@@ -203,6 +208,10 @@
               trackingDeactivateTimer = setTimeout(function () {
                 trackingDeactivateTimer = null;
                 trackingActive = false;
+                // If cursor is off the map (e.g. left elevation chart), hide overlay
+                if (!cursorOnMap) {
+                  hideOverlay();
+                }
               }, 200);
             }
             break;
@@ -245,6 +254,11 @@
 
   // --- Mouse Handling (shared) ---
 
+  function getMapRect() {
+    if (!cachedMapRect) cachedMapRect = mapContainer.getBoundingClientRect();
+    return cachedMapRect;
+  }
+
   function attachMouseListeners() {
     if (mapContainer) return; // already attached
 
@@ -256,15 +270,28 @@
     }
     console.log('[RWGPS Street View] Attached to map container');
 
+    function invalidateMapRect() { cachedMapRect = null; }
+    window.addEventListener('resize', invalidateMapRect);
+    window.addEventListener('scroll', invalidateMapRect, true);
+
     mapContainer.addEventListener('mousemove', onMouseMove);
     mapContainer.addEventListener('mouseleave', function (event) {
       // Don't hide if cursor moved to the overlay
       if (overlayEl.contains(event.relatedTarget)) return;
+      // If tracking is active (e.g. elevation chart hover driving the marker),
+      // keep the overlay visible — it will hide when tracking stops.
+      if (trackingActive) {
+        cursorOnMap = false;
+        return;
+      }
       hideOverlay();
       pendingLatLng = null;
       clearTimeout(trackingDeactivateTimer);
       trackingDeactivateTimer = null;
       trackingActive = false;
+    });
+    mapContainer.addEventListener('mouseenter', function () {
+      cursorOnMap = true;
     });
 
     // Click on overlay opens Google Maps Street View in a new tab
@@ -299,6 +326,7 @@
     var prevY = cursorY;
     cursorX = event.clientX;
     cursorY = event.clientY;
+    cursorOnMap = true;
 
     // Fallback: if cursor keeps moving but RWGPS stops sending tracking
     // events (e.g. cursor drifted off route without triggering setVisible),
@@ -321,7 +349,7 @@
       if (throttleTimer) return;
       throttleTimer = setTimeout(function () { throttleTimer = null; }, 80);
 
-      const rect = mapContainer.getBoundingClientRect();
+      const rect = getMapRect();
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;
 
@@ -338,7 +366,7 @@
 
   // --- Tracking Mode (piggyback on RWGPS hover marker) ---
 
-  function handleTrackingPosition(latlng) {
+  function handleTrackingPosition(data) {
     if (!enabled || !apiKey) return;
 
     // Ensure mouse listeners are attached (tracking can activate before MAP_READY)
@@ -353,22 +381,28 @@
       lastActiveMode = 'tracking';
     }
 
+    if (data.containerPixel && mapContainer) {
+      var rect = getMapRect();
+      markerScreenX = rect.left + data.containerPixel.x;
+      markerScreenY = rect.top + data.containerPixel.y;
+    }
+
     // Skip update if within 5m of last shown point
-    if (lastShownPoint && RwgpsGeo.distanceMeters(lastShownPoint, latlng) < 5) {
+    if (lastShownPoint && RwgpsGeo.distanceMeters(lastShownPoint, data) < 5) {
       positionOverlay();
       showOverlay();
       return;
     }
 
-    var heading = computeSegmentHeading(latlng);
+    var heading = computeSegmentHeading(data);
     if (heading !== null) {
       updateHeading(heading);
     } else {
       showHeadingLoading();
     }
 
-    lastShownPoint = { lat: latlng.lat, lng: latlng.lng };
-    updateStreetViewImage(latlng.lat, latlng.lng, heading || 0);
+    lastShownPoint = { lat: data.lat, lng: data.lng };
+    updateStreetViewImage(data.lat, data.lng, heading || 0);
     positionOverlay();
     showOverlay();
   }
@@ -552,14 +586,34 @@
     var oh = 254;
     var gap = 20;
 
-    var left = cursorX + gap;
-    var top = cursorY - oh - gap;
+    var vw = window.innerWidth;
+    var vh = window.innerHeight;
 
-    if (left + ow > window.innerWidth) {
-      left = cursorX - ow - gap;
+    // In tracking mode, anchor to marker position on the map;
+    // in manual mode, anchor to cursor position.
+    var anchorX = cursorX;
+    var anchorY = cursorY;
+
+    if (trackingActive && markerScreenX !== null && markerScreenY !== null) {
+      if (markerScreenX >= 0 && markerScreenX <= vw &&
+          markerScreenY >= 0 && markerScreenY <= vh) {
+        anchorX = markerScreenX;
+        anchorY = markerScreenY;
+      } else {
+        // Marker is off-screen — center the overlay
+        anchorX = vw / 2;
+        anchorY = vh / 2 + oh / 2 + gap;
+      }
+    }
+
+    var left = anchorX + gap;
+    var top = anchorY - oh - gap;
+
+    if (left + ow > vw) {
+      left = anchorX - ow - gap;
     }
     if (top < 0) {
-      top = cursorY + gap;
+      top = anchorY + gap;
     }
 
     overlayEl.style.left = left + 'px';
@@ -574,6 +628,8 @@
     overlayEl.style.display = 'none';
     lastShownPoint = null;
     lastGeocodedPoint = null;
+    markerScreenX = null;
+    markerScreenY = null;
     streetLabelEl.style.display = 'none';
     hideHeading();
     loadingEl.style.display = 'none';
