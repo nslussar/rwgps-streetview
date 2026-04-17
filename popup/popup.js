@@ -13,6 +13,15 @@ document.addEventListener('DOMContentLoaded', function () {
     enabledInput.checked = result.enabled !== false;
   });
 
+  // Toggle API key visibility
+  var toggleBtn = document.getElementById('toggleKey');
+  var eyeIcon = document.getElementById('eyeIcon');
+  toggleBtn.addEventListener('click', function () {
+    var hidden = apiKeyInput.type === 'password';
+    apiKeyInput.type = hidden ? 'text' : 'password';
+    eyeIcon.src = hidden ? '../icons/eye-show.png' : '../icons/eye-hide.png';
+  });
+
   // Auto-save on change
   var saveTimer = null;
   apiKeyInput.addEventListener('input', function () {

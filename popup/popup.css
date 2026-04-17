@@ -26,14 +26,36 @@ h1 {
   margin-bottom: 4px;
 }
 
-.field input[type="text"] {
+.input-wrapper {
+  position: relative;
+}
+
+.input-wrapper input {
   width: 100%;
-  padding: 6px 8px;
+  padding: 6px 30px 6px 8px;
   border: 1px solid #ccc;
   border-radius: 4px;
   font-size: 13px;
   font-family: monospace;
   box-sizing: border-box;
+}
+
+.toggle-visibility {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  opacity: 0.5;
+}
+
+.toggle-visibility:hover {
+  opacity: 0.8;
 }
 
 .toggle-field {

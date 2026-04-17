@@ -9,7 +9,12 @@
 
   <div class="field">
     <label for="apiKey">Google Maps API Key</label>
-    <input type="text" id="apiKey" placeholder="AIza..." spellcheck="false" autocomplete="off">
+    <div class="input-wrapper">
+      <input type="password" id="apiKey" placeholder="AIza..." spellcheck="false" autocomplete="off">
+      <button type="button" id="toggleKey" class="toggle-visibility" title="Show/hide API key">
+        <img id="eyeIcon" src="../icons/eye-hide.png" width="18" height="18" alt="Toggle visibility">
+      </button>
+    </div>
   </div>
 
   <div class="field toggle-field">
