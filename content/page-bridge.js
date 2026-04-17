@@ -28,6 +28,14 @@
     console.log('[RWGPS SV Bridge] ' + msg);
   }
 
+  function tryGetMapFrom(obj, label) {
+    if (map) return;
+    try {
+      var m = obj.getMap();
+      if (m) { log('Map found via ' + label); onMapFound(m); }
+    } catch (e) { /* ignore */ }
+  }
+
   // Throttle tracking updates to ~12/sec (every 80ms)
   let lastTrackingSend = 0;
   let pendingTrackingLatlng = null;
@@ -173,6 +181,9 @@
         // Clean up other markers from detection map, keep only this one
         markerMoveCounts.clear();
 
+        // In edit mode, getBounds hook may never fire
+        tryGetMapFrom(marker, 'tracking marker.getMap()');
+
         throttledTrackingUpdate(latlng);
         return;
       }
@@ -289,22 +300,70 @@
       scanForExistingPolylines();
       debouncedRouteUpdate();
     }, 5000);
+
+    // RWGPS defers polyline creation (React Query refetchOnWindowFocus).
+    // Instead of waiting, fetch route coords directly from the RWGPS API.
+    apiFetchTimer = setTimeout(function () {
+      apiFetchTimer = null;
+      if (polylines.length > 0) return;
+      fetchRouteFromAPI();
+    }, 2000);
+  }
+
+  var apiRouteCoords = null; // coords fetched directly from RWGPS API
+  var apiFetchTimer = null;
+
+  function fetchRouteFromAPI() {
+    // Extract route ID from URL:
+    //   /routes/12345 or /routes/12345/edit (view/edit existing)
+    //   /routes/new?importId=12345 (editor with imported route)
+    var match = window.location.pathname.match(/\/routes\/(\d+)/);
+    var routeId = match ? match[1] : new URLSearchParams(window.location.search).get('importId');
+    if (!routeId) {
+      log('Cannot extract route ID from URL');
+      return;
+    }
+    log('Fetching route coords from API for route ' + routeId);
+
+    fetch('/routes/' + routeId + '.json')
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function (data) {
+        if (polylines.length > 0) return; // polylines appeared while fetching
+        var trackPoints = (data && data.track_points) ||
+                          (data && data.route && data.route.track_points);
+        if (!trackPoints || trackPoints.length < 2) {
+          log('API response has no track points');
+          return;
+        }
+        var coords = trackPoints.map(function (p) {
+          return {
+            lat: p.y != null ? p.y : p.lat,
+            lng: p.x != null ? p.x : p.lng
+          };
+        });
+        apiRouteCoords = [coords];
+        log('API fetch: got ' + coords.length + ' track points');
+        window.postMessage({
+          type: PREFIX + 'EVENT',
+          action: 'ROUTE_CHANGED',
+          data: apiRouteCoords
+        }, '*');
+      })
+      .catch(function (e) {
+        log('API fetch failed: ' + e.message);
+      });
   }
 
   function trackPolyline(polyline) {
     if (polylines.includes(polyline)) return;
     polylines.push(polyline);
+    apiRouteCoords = null; // real polylines supersede API-fetched coords
+    if (apiFetchTimer) { clearTimeout(apiFetchTimer); apiFetchTimer = null; }
 
-    // If we haven't found the map yet, try to get it from this polyline
-    if (!map) {
-      try {
-        var polyMap = polyline.getMap();
-        if (polyMap) {
-          log('Map found via polyline.getMap()');
-          onMapFound(polyMap);
-        }
-      } catch (e) { /* ignore */ }
-    }
+    tryGetMapFrom(polyline, 'polyline.getMap()');
 
     // Watch for path changes
     try {
@@ -367,10 +426,12 @@
     const coords = extractRouteCoords();
     log('Route update: ' + coords.length + ' polylines, ' +
         coords.reduce(function (s, c) { return s + c.length; }, 0) + ' points');
+    // Don't send empty updates if we have API-fetched coords
+    if (coords.length === 0 && apiRouteCoords) return;
     window.postMessage({
       type: PREFIX + 'EVENT',
       action: 'ROUTE_CHANGED',
-      data: coords
+      data: coords.length > 0 ? coords : apiRouteCoords
     }, '*');
   }, 300);
 

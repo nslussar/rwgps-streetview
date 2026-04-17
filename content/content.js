@@ -23,6 +23,8 @@
   let overlayImg = null;
   let noCoverageEl = null;
   let streetLabelEl = null;
+  let headingLabelEl = null;
+  let headingArrowEl = null;
   let loadingEl = null;
   let lastGeocodedPoint = null;
   let geocodeCounter = 0;
@@ -137,10 +139,23 @@
     streetLabelEl = document.createElement('div');
     streetLabelEl.className = 'sv-street-label';
 
+    headingLabelEl = document.createElement('div');
+    headingLabelEl.className = 'sv-heading-label';
+
+    headingArrowEl = document.createElement('div');
+    headingArrowEl.className = 'sv-heading-arrow';
+    var arrowImg = document.createElement('img');
+    arrowImg.src = chrome.runtime.getURL('icons/heading-arrow.svg');
+    arrowImg.width = 18;
+    arrowImg.height = 18;
+    headingArrowEl.appendChild(arrowImg);
+
     overlayEl.appendChild(overlayImg);
     overlayEl.appendChild(loadingEl);
     overlayEl.appendChild(noCoverageEl);
     overlayEl.appendChild(streetLabelEl);
+    overlayEl.appendChild(headingLabelEl);
+    overlayEl.appendChild(headingArrowEl);
     document.body.appendChild(overlayEl);
   }
 
@@ -334,17 +349,6 @@
     trackingActive = true;
     clearTimeout(trackingHideTimer);
 
-    // Find nearest segment for heading calculation
-    var heading = 0;
-    if (flatCoords.length >= 2) {
-      var nearest = RwgpsGeo.nearestPointOnPolyline(latlng, flatCoords);
-      if (nearest) {
-        var segA = flatCoords[nearest.segmentIndex];
-        var segB = flatCoords[nearest.segmentIndex + 1];
-        heading = RwgpsGeo.computeBearing(segA, segB);
-      }
-    }
-
     // Skip update if within 5m of last shown point
     if (lastShownPoint && RwgpsGeo.distanceMeters(lastShownPoint, latlng) < 5) {
       positionOverlay();
@@ -352,8 +356,15 @@
       return;
     }
 
+    var heading = computeSegmentHeading(latlng);
+    if (heading !== null) {
+      updateHeading(heading);
+    } else {
+      showHeadingLoading();
+    }
+
     lastShownPoint = { lat: latlng.lat, lng: latlng.lng };
-    updateStreetViewImage(latlng.lat, latlng.lng, heading);
+    updateStreetViewImage(latlng.lat, latlng.lng, heading || 0);
     positionOverlay();
     showOverlay();
   }
@@ -385,9 +396,11 @@
       return;
     }
 
-    var segA = flatCoords[nearest.segmentIndex];
-    var segB = flatCoords[nearest.segmentIndex + 1];
-    var heading = RwgpsGeo.computeBearing(segA, segB);
+    var heading = RwgpsGeo.computeBearing(
+      flatCoords[nearest.segmentIndex],
+      flatCoords[nearest.segmentIndex + 1]
+    );
+    updateHeading(heading);
 
     lastShownPoint = { lat: nearest.lat, lng: nearest.lng };
     updateStreetViewImage(nearest.lat, nearest.lng, heading);
@@ -420,6 +433,43 @@
     } else {
       streetLabelEl.style.display = 'none';
     }
+  }
+
+  // --- Heading Display ---
+
+  var lastDisplayedHeading = null;
+
+  function computeSegmentHeading(latlng) {
+    if (flatCoords.length < 2) return null;
+    var nearest = RwgpsGeo.nearestPointOnPolyline(latlng, flatCoords);
+    if (!nearest) return null;
+    return RwgpsGeo.computeBearing(
+      flatCoords[nearest.segmentIndex],
+      flatCoords[nearest.segmentIndex + 1]
+    );
+  }
+
+  function updateHeading(heading) {
+    var rounded = Math.round(heading);
+    if (rounded === lastDisplayedHeading) return;
+    lastDisplayedHeading = rounded;
+    headingLabelEl.textContent = 'Heading ' + RwgpsGeo.bearingToCompass(heading);
+    headingLabelEl.style.display = 'block';
+    headingArrowEl.style.display = 'flex';
+    headingArrowEl.style.transform = 'rotate(' + rounded + 'deg)';
+  }
+
+  function showHeadingLoading() {
+    lastDisplayedHeading = null;
+    headingLabelEl.textContent = 'Loading route\u2026';
+    headingLabelEl.style.display = 'block';
+    headingArrowEl.style.display = 'none';
+  }
+
+  function hideHeading() {
+    lastDisplayedHeading = null;
+    headingLabelEl.style.display = 'none';
+    headingArrowEl.style.display = 'none';
   }
 
   // --- Overlay Management ---
@@ -516,6 +566,7 @@
     lastShownPoint = null;
     lastGeocodedPoint = null;
     streetLabelEl.style.display = 'none';
+    hideHeading();
     loadingEl.style.display = 'none';
     clearTimeout(loadingSpinnerTimer);
   }
