@@ -9,7 +9,7 @@ Chrome extension (Manifest V3) that shows a Google Street View static image over
 Two execution contexts communicate via `window.postMessage`:
 
 - **Page bridge** (`content/page-bridge.js`) — Injected into the MAIN world. Hooks Google Maps constructors and prototype methods (`Map`, `Polyline`, `Marker.setPosition`/`setVisible`, `Polyline.setMap`, `Map.getBounds`) to capture map instances and detect RWGPS's route-tracking marker. Also handles pixel-to-latlng conversion and reverse geocoding. Forwards tracking positions to the content script.
-- **Content script** (`content/content.js`) — Runs in the ISOLATED world. Manages the overlay DOM (Street View image, street name label, heading display, no-coverage indicator), cursor tracking, API key validation, and Street View image loading. Has two modes: tracking mode (piggybacks on RWGPS's hover marker) and manual fallback (own pixel-to-latlng + nearest-point calculation). Clicking the overlay opens Google Maps Street View in a new tab.
+- **Content script** (`content/content.js`) — Runs in the ISOLATED world. Manages the overlay DOM (Street View image, street name label, heading display, no-coverage indicator), cursor tracking, API key validation, and Street View image loading. Has two modes that switch dynamically: tracking mode (piggybacks on RWGPS's hover marker) and manual mode (own pixel-to-latlng + nearest-point calculation). At high zoom RWGPS only snaps the tracking marker to discrete waypoints, so tracking is deactivated (200ms debounce) and manual mode fills the gaps. Clicking the overlay opens Google Maps Street View in a new tab.
 
 Supporting files:
 - `lib/geo.js` — Pure geometry functions (nearest point on polyline, bearing, haversine distance, compass direction)
@@ -24,7 +24,7 @@ Supporting files:
 - **RWGPS defers polyline creation** via React Query's `refetchOnWindowFocus`. Polyline objects may not exist until the user switches tabs. The bridge works around this by fetching route coordinates directly from `/routes/{id}.json` (same-origin API) as a fallback. API-fetched coords are cleared once real polylines appear.
 - Street View images are preloaded offscreen (`new Image()`) to prevent in-flight load cancellation when the cursor moves rapidly. Uses `navigator.onLine` in the error handler to distinguish no-coverage from network failures.
 - The overlay displays a **heading compass** (text label + rotatable arrow) showing the route direction at the hovered point. Heading is computed from the nearest polyline segment via `computeSegmentHeading()`. The arrow SVG is loaded from `icons/heading-arrow.svg` via `chrome.runtime.getURL`.
-- The `&radius=100` parameter on Street View Static API requests searches within 100m for the nearest panorama
+- The `&radius=25` parameter on Street View Static API requests searches within 25m for the nearest panorama
 - Street View Static API has a minimum image size (between 10x10 and 100x100). Use at least 100x100 for validation/test requests.
 
 ## Build and release

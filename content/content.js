@@ -32,7 +32,6 @@
   let bridgeReady = false;
 
   // Tracking mode state
-  let useTrackingMode = false;
   let trackingActive = false;
   let trackingTimeout = null;
 
@@ -44,7 +43,8 @@
   // Cursor position (updated by mousemove, used by both modes)
   let cursorX = 0;
   let cursorY = 0;
-  let trackingHideTimer = null;
+  let trackingDeactivateTimer = null;
+  let lastActiveMode = null; // 'tracking' or 'manual' — for logging transitions
 
   // --- Initialization ---
 
@@ -173,7 +173,7 @@
             setRouteCoords(msg.data);
             break;
           case 'LATLNG':
-            if (!useTrackingMode) {
+            if (!trackingActive) {
               handleManualLatLng(msg.data, msg.requestId, msg.zoom);
             }
             break;
@@ -197,13 +197,13 @@
             handleTrackingPosition(msg.data);
             break;
           case 'TRACKING_LOST':
-            // Don't hide immediately - RWGPS may briefly hide/show the marker.
-            // Let the trackingHideTimer handle it if tracking doesn't resume.
-            if (!trackingHideTimer) {
-              trackingHideTimer = setTimeout(function () {
-                hideOverlay();
+            // At high zoom, RWGPS hides the marker between sparse waypoints.
+            // Debounce to avoid rapid tracking→manual oscillation.
+            if (!trackingDeactivateTimer) {
+              trackingDeactivateTimer = setTimeout(function () {
+                trackingDeactivateTimer = null;
                 trackingActive = false;
-              }, 500);
+              }, 200);
             }
             break;
         }
@@ -224,7 +224,7 @@
 
     // Wait 10s for tracking mode to activate; if not, fall back to manual
     trackingTimeout = setTimeout(function () {
-      if (!useTrackingMode) {
+      if (lastActiveMode !== 'tracking') {
         console.log('[RWGPS Street View] Tracking marker not detected, using manual mode');
       }
     }, 10000);
@@ -262,7 +262,8 @@
       if (overlayEl.contains(event.relatedTarget)) return;
       hideOverlay();
       pendingLatLng = null;
-      clearTimeout(trackingHideTimer);
+      clearTimeout(trackingDeactivateTimer);
+      trackingDeactivateTimer = null;
       trackingActive = false;
     });
 
@@ -285,7 +286,8 @@
       if (mapContainer.contains(event.relatedTarget)) return;
       hideOverlay();
       pendingLatLng = null;
-      clearTimeout(trackingHideTimer);
+      clearTimeout(trackingDeactivateTimer);
+      trackingDeactivateTimer = null;
       trackingActive = false;
     });
   }
@@ -298,22 +300,24 @@
     cursorX = event.clientX;
     cursorY = event.clientY;
 
-    // In tracking mode, only start the hide timer if the cursor actually moved.
-    // When stationary, RWGPS stops calling setPosition, but the overlay should stay.
-    if (useTrackingMode) {
+    // Fallback: if cursor keeps moving but RWGPS stops sending tracking
+    // events (e.g. cursor drifted off route without triggering setVisible),
+    // deactivate tracking so manual mode can take over.
+    if (trackingActive && !trackingDeactivateTimer) {
       var dx = cursorX - prevX;
       var dy = cursorY - prevY;
       if (dx * dx + dy * dy > 4) { // moved more than 2px
-        clearTimeout(trackingHideTimer);
-        trackingHideTimer = setTimeout(function () {
-          hideOverlay();
+        trackingDeactivateTimer = setTimeout(function () {
+          trackingDeactivateTimer = null;
           trackingActive = false;
         }, 500);
       }
     }
 
-    // In manual mode, we need to convert pixel to latlng ourselves.
-    if (!useTrackingMode && flatCoords.length >= 2) {
+    // Manual mode: convert pixel to latlng when tracking isn't active.
+    // This serves as both primary mode (no tracking marker) and fallback
+    // (tracking marker hidden between sparse waypoints at high zoom).
+    if (!trackingActive && flatCoords.length >= 2) {
       if (throttleTimer) return;
       throttleTimer = setTimeout(function () { throttleTimer = null; }, 80);
 
@@ -337,17 +341,17 @@
   function handleTrackingPosition(latlng) {
     if (!enabled || !apiKey) return;
 
-    if (!useTrackingMode) {
-      useTrackingMode = true;
-      console.log('[RWGPS Street View] Tracking mode activated');
-    }
-
     // Ensure mouse listeners are attached (tracking can activate before MAP_READY)
     if (!mapContainer) {
       attachMouseListeners();
     }
     trackingActive = true;
-    clearTimeout(trackingHideTimer);
+    clearTimeout(trackingDeactivateTimer);
+    trackingDeactivateTimer = null;
+    if (lastActiveMode !== 'tracking') {
+      console.log('[RWGPS Street View] Switched to RWGPS tracking mode');
+      lastActiveMode = 'tracking';
+    }
 
     // Skip update if within 5m of last shown point
     if (lastShownPoint && RwgpsGeo.distanceMeters(lastShownPoint, latlng) < 5) {
@@ -389,6 +393,11 @@
     if (distMeters > thresholdMeters) {
       hideOverlay();
       return;
+    }
+
+    if (lastActiveMode !== 'manual') {
+      console.log('[RWGPS Street View] Switched to manual mode');
+      lastActiveMode = 'manual';
     }
 
     if (lastShownPoint && RwgpsGeo.distanceMeters(lastShownPoint, nearest) < 5) {
@@ -493,7 +502,7 @@
       + '?size=400x250'
       + '&location=' + lat.toFixed(6) + ',' + lng.toFixed(6)
       + '&heading=' + Math.round(heading)
-      + '&radius=100'
+      + '&radius=25'
       + '&pitch=-5'
       + '&fov=90'
       + '&key=' + encodeURIComponent(apiKey)
