@@ -8,8 +8,21 @@ Chrome extension (Manifest V3) that shows a Google Street View static image over
 
 Two execution contexts communicate via `window.postMessage`:
 
-- **Page bridge** (`content/page-bridge.js`) — Injected into the MAIN world. Hooks Google Maps constructors and prototype methods (`Map`, `Polyline`, `Marker.setPosition`/`setVisible`, `Polyline.setMap`, `Map.getBounds`) to capture map instances and detect RWGPS's route-tracking marker. Also handles pixel-to-latlng conversion and reverse geocoding. Forwards tracking positions to the content script.
-- **Content script** (`content/content.js`) — Runs in the ISOLATED world. Manages the overlay DOM (Street View image, street name label, heading display, no-coverage indicator), cursor tracking, API key validation, and Street View image loading. Has two modes that switch dynamically: tracking mode (piggybacks on RWGPS's hover marker) and manual mode (own pixel-to-latlng + nearest-point calculation). At high zoom RWGPS only snaps the tracking marker to discrete waypoints, so tracking is deactivated (200ms debounce) and manual mode fills the gaps. Clicking the overlay opens Google Maps Street View in a new tab.
+- **Page bridge** (`content/page-bridge.js`) — Injected into the MAIN world.
+  - Hooks Google Maps constructors and prototype methods (`Map`, `Polyline`, `Marker.setPosition`/`setVisible`, `Polyline.setMap`, `Map.getBounds`) to capture map instances
+  - Detects RWGPS's route-tracking marker via rapid-call counting (re-identification: 2 calls in 300ms; first-time: 3 calls in 500ms)
+  - Only forwards `setPosition` when the marker is visible (avoids fighting `TRACKING_LOST` deactivation)
+  - Hooks `setVisible(true)` to send position immediately on marker reappear
+  - Forwards tracking positions to the content script (throttled to 150ms)
+  - Handles pixel-to-latlng conversion and reverse geocoding
+- **Content script** (`content/content.js`) — Runs in the ISOLATED world.
+  - Manages overlay DOM (Street View image, street name label, heading display, no-coverage indicator)
+  - Two modes switch dynamically: **tracking mode** (piggybacks on RWGPS's hover marker) and **manual mode** (own pixel-to-latlng + nearest-point calculation)
+  - RWGPS destroys and recreates the tracking marker when cursor leaves/returns to the route
+  - Zoom-aware deactivation: 500ms at high zoom (quick handoff to manual mode), 2s at low zoom (safety net for destroyed markers)
+  - Linger timer starts at moment of tracking loss so total hide time is predictable
+  - Manual mode activates at zoom >= 13
+  - Clicking the overlay opens Google Maps Street View in a new tab
 
 Supporting files:
 - `lib/geo.js` — Pure geometry functions (nearest point on polyline, bearing, haversine distance, compass direction)
