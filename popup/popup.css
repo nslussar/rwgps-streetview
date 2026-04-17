@@ -38,21 +38,29 @@ h1 {
   position: relative;
 }
 
-.input-wrapper input {
-  width: 100%;
-  padding: 7px 32px 7px 9px;
+.field input[type="password"],
+.field input[type="text"],
+.field input[type="number"] {
+  padding: 7px 9px;
   border: 1px solid #d0d0d0;
   border-radius: 5px;
   font-size: 12px;
-  box-sizing: border-box;
   background: #fafafa;
   transition: border-color 0.15s;
 }
 
-.input-wrapper input:focus {
+.field input[type="password"]:focus,
+.field input[type="text"]:focus,
+.field input[type="number"]:focus {
   outline: none;
   border-color: #4285f4;
   background: #fff;
+}
+
+.input-wrapper input {
+  width: 100%;
+  padding-right: 32px;
+  box-sizing: border-box;
 }
 
 .toggle-visibility {
@@ -78,6 +86,10 @@ h1 {
 
 .toggle-visibility img {
   display: block;
+}
+
+#radius {
+  width: 80px;
 }
 
 .toggle-field {

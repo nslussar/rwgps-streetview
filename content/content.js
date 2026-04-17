@@ -19,10 +19,12 @@
   const DEACTIVATE_DELAY_HIGH_ZOOM = 500; // quick handoff to manual mode
   const DEACTIVATE_DELAY_LOW_ZOOM = 2000; // safety net when marker is destroyed
   const TRACKING_LOST_DEBOUNCE = 200; // debounce rapid show/hide oscillation
+  const DEFAULT_RADIUS = 10; // meters — Street View panorama search radius
   const MERCATOR_METERS_PER_PX_Z0 = 156543; // meters/pixel at zoom 0, equator (Earth circumference / 256)
   const METERS_PER_DEGREE = 111000;          // approx meters per degree of latitude
   let apiKey = '';
   let enabled = true;
+  let radius = DEFAULT_RADIUS;
   let keyValid = null; // null = untested, true = valid, false = invalid
   let routeCoords = []; // array of arrays of {lat, lng}
   let flatCoords = [];  // flattened for nearest-point search
@@ -63,9 +65,10 @@
   // --- Initialization ---
 
   function init() {
-    chrome.storage.sync.get(['apiKey', 'enabled'], function (result) {
+    chrome.storage.sync.get(['apiKey', 'enabled', 'radius'], function (result) {
       apiKey = result.apiKey || '';
       enabled = result.enabled !== false;
+      radius = result.radius || DEFAULT_RADIUS;
 
       if (!apiKey) {
         console.log('[RWGPS Street View] No API key configured. Will initialize when key is set.');
@@ -99,6 +102,9 @@
       if (changes.enabled) {
         enabled = changes.enabled.newValue !== false;
         if (!enabled) hideOverlay();
+      }
+      if (changes.radius) {
+        radius = changes.radius.newValue || DEFAULT_RADIUS;
       }
     });
   }
@@ -563,7 +569,7 @@
       + '?size=400x250'
       + '&location=' + lat.toFixed(6) + ',' + lng.toFixed(6)
       + '&heading=' + Math.round(heading)
-      + '&radius=25'
+      + '&radius=' + radius
       + '&pitch=-5'
       + '&fov=90'
       + '&key=' + encodeURIComponent(apiKey)
