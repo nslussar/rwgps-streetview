@@ -20,7 +20,7 @@ Supporting files:
 
 - RWGPS uses **Google Maps JavaScript API** (not Leaflet) for its map rendering
 - The bridge must handle a race condition: Google Maps instances may be created before the bridge script loads. Multiple fallbacks: `Polyline.setMap` hook, `Map.getBounds` hook, `polyline.getMap()`, and DOM scanning for `.gm-style` elements with `__gm` properties.
-- Street View images are preloaded offscreen (`new Image()`) to prevent in-flight load cancellation when the cursor moves rapidly
+- Street View images are preloaded offscreen (`new Image()`) to prevent in-flight load cancellation when the cursor moves rapidly. Uses `navigator.onLine` in the error handler to distinguish no-coverage from network failures.
 - The `&radius=100` parameter on Street View Static API requests searches within 100m for the nearest panorama
 - Street View Static API has a minimum image size (between 10x10 and 100x100). Use at least 100x100 for validation/test requests.
 

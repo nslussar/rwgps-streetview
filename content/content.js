@@ -480,7 +480,9 @@
       clearTimeout(loadingSpinnerTimer);
       overlayImg.style.display = 'none';
       loadingEl.style.display = 'none';
-      noCoverageEl.textContent = 'No Street View coverage here';
+      noCoverageEl.textContent = navigator.onLine
+        ? 'No Street View coverage here'
+        : 'Could not load — check your connection';
       noCoverageEl.style.display = 'flex';
     };
     preload.src = url;
