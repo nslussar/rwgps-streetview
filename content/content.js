@@ -23,6 +23,7 @@
   let overlayImg = null;
   let noCoverageEl = null;
   let streetLabelEl = null;
+  let loadingEl = null;
   let lastGeocodedPoint = null;
   let geocodeCounter = 0;
   let mapContainer = null;
@@ -121,6 +122,13 @@
     overlayImg = document.createElement('img');
     overlayImg.alt = 'Street View preview';
 
+    loadingEl = document.createElement('div');
+    loadingEl.className = 'sv-loading';
+    var spinner = document.createElement('div');
+    spinner.className = 'sv-spinner';
+    loadingEl.appendChild(spinner);
+    loadingEl.style.display = 'none';
+
     noCoverageEl = document.createElement('div');
     noCoverageEl.className = 'sv-no-coverage';
     noCoverageEl.textContent = 'No Street View coverage here';
@@ -130,6 +138,7 @@
     streetLabelEl.className = 'sv-street-label';
 
     overlayEl.appendChild(overlayImg);
+    overlayEl.appendChild(loadingEl);
     overlayEl.appendChild(noCoverageEl);
     overlayEl.appendChild(streetLabelEl);
     document.body.appendChild(overlayEl);
@@ -416,6 +425,8 @@
   // --- Overlay Management ---
 
   var preloadCounter = 0;
+  var loadingSpinnerTimer = null;
+  var hasLoadedImage = false;
 
   function updateStreetViewImage(lat, lng, heading) {
     if (keyValid === false) {
@@ -441,16 +452,34 @@
     // Preload offscreen so we don't cancel in-flight loads on the visible img.
     // Only swap the visible src once the preload completes.
     var id = ++preloadCounter;
+
+    // Delay spinner when a previous image is already visible
+    clearTimeout(loadingSpinnerTimer);
+    if (!hasLoadedImage) {
+      loadingEl.style.display = 'flex';
+      noCoverageEl.style.display = 'none';
+    } else {
+      loadingSpinnerTimer = setTimeout(function () {
+        if (id === preloadCounter) {
+          loadingEl.style.display = 'flex';
+        }
+      }, 500);
+    }
     var preload = new Image();
     preload.onload = function () {
       if (id !== preloadCounter) return; // stale
+      clearTimeout(loadingSpinnerTimer);
+      hasLoadedImage = true;
       overlayImg.src = url;
       overlayImg.style.display = 'block';
+      loadingEl.style.display = 'none';
       noCoverageEl.style.display = 'none';
     };
     preload.onerror = function () {
       if (id !== preloadCounter) return; // stale
+      clearTimeout(loadingSpinnerTimer);
       overlayImg.style.display = 'none';
+      loadingEl.style.display = 'none';
       noCoverageEl.textContent = 'No Street View coverage here';
       noCoverageEl.style.display = 'flex';
     };
@@ -485,6 +514,8 @@
     lastShownPoint = null;
     lastGeocodedPoint = null;
     streetLabelEl.style.display = 'none';
+    loadingEl.style.display = 'none';
+    clearTimeout(loadingSpinnerTimer);
   }
 
   // --- Start ---
