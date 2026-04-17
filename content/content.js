@@ -13,6 +13,8 @@
   'use strict';
 
   const PREFIX = 'RWGPS_SV_';
+  const LINGER_MS = 2000; // how long overlay stays after cursor leaves route
+  const MANUAL_MODE_MIN_ZOOM = 16; // below this, rely on RWGPS tracking only
   let apiKey = '';
   let enabled = true;
   let keyValid = null; // null = untested, true = valid, false = invalid
@@ -48,8 +50,8 @@
 
   let markerScreenX = null;
   let markerScreenY = null;
-  let cursorOnMap = false;
   let cachedMapRect = null; // cached getBoundingClientRect for mapContainer
+  let lingerTimer = null; // delays overlay hide so user can click it
 
   // --- Initialization ---
 
@@ -208,10 +210,7 @@
               trackingDeactivateTimer = setTimeout(function () {
                 trackingDeactivateTimer = null;
                 trackingActive = false;
-                // If cursor is off the map (e.g. left elevation chart), hide overlay
-                if (!cursorOnMap) {
-                  hideOverlay();
-                }
+                startLingerTimer();
               }, 200);
             }
             break;
@@ -259,6 +258,21 @@
     return cachedMapRect;
   }
 
+  function startLingerTimer() {
+    cancelLingerTimer();
+    lingerTimer = setTimeout(function () {
+      lingerTimer = null;
+      hideOverlay();
+    }, LINGER_MS);
+  }
+
+  function cancelLingerTimer() {
+    if (lingerTimer) {
+      clearTimeout(lingerTimer);
+      lingerTimer = null;
+    }
+  }
+
   function attachMouseListeners() {
     if (mapContainer) return; // already attached
 
@@ -280,18 +294,12 @@
       if (overlayEl.contains(event.relatedTarget)) return;
       // If tracking is active (e.g. elevation chart hover driving the marker),
       // keep the overlay visible — it will hide when tracking stops.
-      if (trackingActive) {
-        cursorOnMap = false;
-        return;
-      }
+      if (trackingActive) return;
       hideOverlay();
       pendingLatLng = null;
       clearTimeout(trackingDeactivateTimer);
       trackingDeactivateTimer = null;
       trackingActive = false;
-    });
-    mapContainer.addEventListener('mouseenter', function () {
-      cursorOnMap = true;
     });
 
     // Click on overlay opens Google Maps Street View in a new tab
@@ -302,6 +310,8 @@
         + ',3a,75y,0h,90t/data=!3m4!1e1!3m2!1s!2e0';
       window.open(url, '_blank');
     });
+
+    overlayEl.addEventListener('mouseenter', cancelLingerTimer);
 
     // Forward mousemove from overlay to keep tracking alive
     overlayEl.addEventListener('mousemove', function (event) {
@@ -326,7 +336,6 @@
     var prevY = cursorY;
     cursorX = event.clientX;
     cursorY = event.clientY;
-    cursorOnMap = true;
 
     // Fallback: if cursor keeps moving but RWGPS stops sending tracking
     // events (e.g. cursor drifted off route without triggering setVisible),
@@ -338,6 +347,7 @@
         trackingDeactivateTimer = setTimeout(function () {
           trackingDeactivateTimer = null;
           trackingActive = false;
+          startLingerTimer();
         }, 500);
       }
     }
@@ -376,6 +386,7 @@
     trackingActive = true;
     clearTimeout(trackingDeactivateTimer);
     trackingDeactivateTimer = null;
+    cancelLingerTimer();
     if (lastActiveMode !== 'tracking') {
       console.log('[RWGPS Street View] Switched to RWGPS tracking mode');
       lastActiveMode = 'tracking';
@@ -413,22 +424,27 @@
     if (requestId !== pendingLatLng) return;
     pendingLatLng = null;
 
+    // At low zoom RWGPS tracking is reliable — only use manual mode
+    // at high zoom where tracking is sparse between waypoints.
+    var z = zoom || 15;
+    if (z < MANUAL_MODE_MIN_ZOOM && lastActiveMode === 'tracking') return;
+
     var nearest = RwgpsGeo.nearestPointOnPolyline(latlng, flatCoords);
     if (!nearest) {
-      hideOverlay();
+      startLingerTimer();
       return;
     }
 
-    var z = zoom || 15;
     var metersPerPixel = 156543 * Math.cos(latlng.lat * Math.PI / 180) / Math.pow(2, z);
-    var thresholdMeters = 25 * metersPerPixel;
+    var thresholdMeters = 10 * metersPerPixel;
     var distMeters = nearest.distanceDeg * 111000 * Math.cos(latlng.lat * Math.PI / 180);
 
     if (distMeters > thresholdMeters) {
-      hideOverlay();
+      startLingerTimer();
       return;
     }
 
+    cancelLingerTimer();
     if (lastActiveMode !== 'manual') {
       console.log('[RWGPS Street View] Switched to manual mode');
       lastActiveMode = 'manual';
@@ -630,6 +646,7 @@
     lastGeocodedPoint = null;
     markerScreenX = null;
     markerScreenY = null;
+    cancelLingerTimer();
     streetLabelEl.style.display = 'none';
     hideHeading();
     loadingEl.style.display = 'none';
