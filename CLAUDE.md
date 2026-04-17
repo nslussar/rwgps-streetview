@@ -22,6 +22,7 @@ Supporting files:
 - The bridge must handle a race condition: Google Maps Map/Polyline instances may be created before the bridge script loads. Fallback: `polyline.getMap()` captures the map from intercepted polylines.
 - Street View images are preloaded offscreen (`new Image()`) to prevent in-flight load cancellation when the cursor moves rapidly
 - The `&radius=100` parameter on Street View Static API requests searches within 100m for the nearest panorama
+- Street View Static API has a minimum image size (between 10x10 and 100x100). Use at least 100x100 for validation/test requests.
 
 ## Build and release
 

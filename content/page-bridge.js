@@ -127,6 +127,19 @@
       }
     };
 
+    // Fallback: hook getBounds to catch existing map instances.
+    // When injected late, the Map constructor was already called so our
+    // constructor hook missed it. getBounds is called frequently by the
+    // Maps API itself, so this captures the instance almost immediately.
+    const origGetBounds = google.maps.Map.prototype.getBounds;
+    google.maps.Map.prototype.getBounds = function () {
+      if (!map) {
+        log('Map found via getBounds hook');
+        onMapFound(this);
+      }
+      return origGetBounds.call(this);
+    };
+
     log('Constructor hooks installed');
   }
 
@@ -174,10 +187,15 @@
     if (map) return true;
 
     const gmStyle = document.querySelector('.gm-style');
-    if (!gmStyle) return false;
+    if (!gmStyle) {
+      log('scanForExistingMap: no .gm-style element found');
+      return false;
+    }
 
     const mapDiv = gmStyle.parentElement;
     if (!mapDiv) return false;
+
+    log('scanForExistingMap: found map div, checking __gm=' + !!mapDiv.__gm);
 
     // Google Maps stores __gm on the map div
     if (mapDiv.__gm) {

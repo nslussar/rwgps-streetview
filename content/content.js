@@ -15,6 +15,7 @@
   const PREFIX = 'RWGPS_SV_';
   let apiKey = '';
   let enabled = true;
+  let keyValid = null; // null = untested, true = valid, false = invalid
   let routeCoords = []; // array of arrays of {lat, lng}
   let flatCoords = [];  // flattened for nearest-point search
   let lastShownPoint = null;
@@ -50,12 +51,13 @@
       enabled = result.enabled !== false;
 
       if (!apiKey) {
-        console.log('[RWGPS Street View] No API key configured. Click the extension icon to set one.');
+        console.log('[RWGPS Street View] No API key configured. Will initialize when key is set.');
         return;
       }
 
       if (!enabled) return;
 
+      validateApiKey();
       injectBridge();
       createOverlay();
       listenForBridgeMessages();
@@ -63,12 +65,46 @@
     });
 
     chrome.storage.onChanged.addListener(function (changes) {
-      if (changes.apiKey) apiKey = changes.apiKey.newValue || '';
+      if (changes.apiKey) {
+        var hadKey = !!apiKey;
+        apiKey = changes.apiKey.newValue || '';
+        keyValid = null;
+        if (apiKey) validateApiKey();
+        // If this is the first time an API key is set, run full setup
+        if (!hadKey && apiKey && enabled) {
+          console.log('[RWGPS Street View] API key set, running late initialization');
+          injectBridge();
+          createOverlay();
+          listenForBridgeMessages();
+          waitForMap();
+        }
+      }
       if (changes.enabled) {
         enabled = changes.enabled.newValue !== false;
         if (!enabled) hideOverlay();
       }
     });
+  }
+
+  function validateApiKey() {
+    if (!apiKey) return;
+    // Test with a known-good Street View location (Times Square)
+    var testUrl = 'https://maps.googleapis.com/maps/api/streetview'
+      + '?size=100x100&location=40.758896,-73.985130'
+      + '&radius=1000'
+      + '&key=' + encodeURIComponent(apiKey)
+      + '&return_error_code=true';
+    console.log('[RWGPS Street View] Validating API key, test URL: ' + testUrl);
+    var testImg = new Image();
+    testImg.onload = function () {
+      keyValid = true;
+      console.log('[RWGPS Street View] API key is valid (test image loaded, size: ' + testImg.naturalWidth + 'x' + testImg.naturalHeight + ')');
+    };
+    testImg.onerror = function () {
+      keyValid = false;
+      console.log('[RWGPS Street View] API key validation failed (test image error). Try opening this URL in a browser tab to see the error: ' + testUrl);
+    };
+    testImg.src = testUrl;
   }
 
   function injectBridge() {
@@ -382,6 +418,14 @@
   var preloadCounter = 0;
 
   function updateStreetViewImage(lat, lng, heading) {
+    if (keyValid === false) {
+      overlayImg.style.display = 'none';
+      noCoverageEl.textContent = 'Invalid API key — check extension settings';
+      noCoverageEl.style.display = 'flex';
+      streetLabelEl.style.display = 'none';
+      return;
+    }
+
     requestGeocode(lat, lng);
 
     var url = 'https://maps.googleapis.com/maps/api/streetview'
@@ -407,6 +451,7 @@
     preload.onerror = function () {
       if (id !== preloadCounter) return; // stale
       overlayImg.style.display = 'none';
+      noCoverageEl.textContent = 'No Street View coverage here';
       noCoverageEl.style.display = 'flex';
     };
     preload.src = url;
