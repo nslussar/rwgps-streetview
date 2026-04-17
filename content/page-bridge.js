@@ -9,6 +9,7 @@
   'use strict';
 
   const PREFIX = 'RWGPS_SV_';
+  const TRACKING_UPDATE_INTERVAL = 150; // keep in sync with content.js
   let map = null;
   let polylines = [];
   let overlayProjection = null;
@@ -59,7 +60,7 @@
     if (px) data.containerPixel = px;
 
     var now = Date.now();
-    if (now - lastTrackingSend >= 80) {
+    if (now - lastTrackingSend >= TRACKING_UPDATE_INTERVAL) {
       lastTrackingSend = now;
       clearTimeout(trackingSendTimer);
       window.postMessage({
@@ -82,7 +83,7 @@
             }, '*');
             pendingTrackingLatlng = null;
           }
-        }, 80 - (now - lastTrackingSend));
+        }, TRACKING_UPDATE_INTERVAL - (now - lastTrackingSend));
       }
     }
   }
@@ -139,11 +140,18 @@
     const origSetVisible = google.maps.Marker.prototype.setVisible;
     google.maps.Marker.prototype.setVisible = function (visible) {
       origSetVisible.call(this, visible);
-      if (this === trackingMarker && !visible) {
-        window.postMessage({
-          type: PREFIX + 'EVENT',
-          action: 'TRACKING_LOST'
-        }, '*');
+      if (this === trackingMarker) {
+        if (!visible) {
+          window.postMessage({
+            type: PREFIX + 'EVENT',
+            action: 'TRACKING_LOST'
+          }, '*');
+        } else {
+          // Marker reappeared — send its current position immediately
+          // so the overlay updates without waiting for the next setPosition
+          var pos = this.getPosition();
+          if (pos) throttledTrackingUpdate(pos);
+        }
       }
     };
 
@@ -166,41 +174,43 @@
   function onMarkerMoved(marker, latlng) {
     if (!latlng) return;
 
-    // If we already identified the tracking marker, forward (throttled)
+    // If we already identified the tracking marker, forward only when visible.
+    // RWGPS may reposition the marker while hidden; sending those updates
+    // would fight with TRACKING_LOST deactivation.
     if (marker === trackingMarker) {
-      throttledTrackingUpdate(latlng);
+      var vis = marker.getVisible();
+      if (vis) throttledTrackingUpdate(latlng);
       return;
     }
 
-    // Detect tracking marker: the one whose setPosition is called rapidly (>5 times/sec)
+    // Detect tracking marker: the one whose setPosition is called rapidly.
+    // Re-identification (RWGPS recreated the marker): 2 calls within 300ms.
+    // First identification: 3 calls within 500ms to avoid static markers.
     var now = Date.now();
     var info = markerMoveCounts.get(marker);
     if (!info) {
-      info = { count: 0, windowStart: now };
+      info = { count: 0, firstSeen: now };
       markerMoveCounts.set(marker, info);
     }
-
     info.count++;
 
-    // Reset window every second
-    if (now - info.windowStart > 1000) {
-      if (info.count > 5) {
-        // This marker is being repositioned rapidly - it's the tracking marker
-        if (trackingMarker !== marker) {
-          log('Identified RWGPS tracking marker (moved ' + info.count + ' times/sec)');
-        }
-        trackingMarker = marker;
-        // Clean up other markers from detection map, keep only this one
-        markerMoveCounts.clear();
+    var elapsed = now - info.firstSeen;
+    var isRapid = trackingMarker
+      ? info.count >= 2 && elapsed < 300
+      : info.count >= 3 && elapsed < 500;
 
-        // In edit mode, getBounds hook may never fire
-        tryGetMapFrom(marker, 'tracking marker.getMap()');
-
-        throttledTrackingUpdate(latlng);
-        return;
+    if (isRapid) {
+      if (trackingMarker !== marker) {
+        log('Identified RWGPS tracking marker (moved ' + info.count + ' times in ' + (now - info.firstSeen) + 'ms)');
       }
-      info.count = 0;
-      info.windowStart = now;
+      trackingMarker = marker;
+      markerMoveCounts.clear();
+
+      // In edit mode, getBounds hook may never fire
+      tryGetMapFrom(marker, 'tracking marker.getMap()');
+
+      throttledTrackingUpdate(latlng);
+      return;
     }
   }
 

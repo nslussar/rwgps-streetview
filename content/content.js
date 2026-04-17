@@ -13,8 +13,12 @@
   'use strict';
 
   const PREFIX = 'RWGPS_SV_';
-  const LINGER_MS = 2000; // how long overlay stays after cursor leaves route
-  const MANUAL_MODE_MIN_ZOOM = 16; // below this, rely on RWGPS tracking only
+  const TRACKING_UPDATE_INTERVAL = 150; // keep in sync with page-bridge.js
+  const LINGER_MS = 2000;
+  const MANUAL_MODE_MIN_ZOOM = 13;
+  const DEACTIVATE_DELAY_HIGH_ZOOM = 500; // quick handoff to manual mode
+  const DEACTIVATE_DELAY_LOW_ZOOM = 2000; // safety net when marker is destroyed
+  const TRACKING_LOST_DEBOUNCE = 200; // debounce rapid show/hide oscillation
   let apiKey = '';
   let enabled = true;
   let keyValid = null; // null = untested, true = valid, false = invalid
@@ -41,6 +45,7 @@
   let pendingLatLng = null;
   let requestIdCounter = 0;
   let throttleTimer = null;
+  let lastKnownZoom = null;
 
   // Cursor position (updated by mousemove, used by both modes)
   let cursorX = 0;
@@ -180,6 +185,7 @@
             setRouteCoords(msg.data);
             break;
           case 'LATLNG':
+            if (msg.zoom) lastKnownZoom = msg.zoom;
             if (!trackingActive) {
               handleManualLatLng(msg.data, msg.requestId, msg.zoom);
             }
@@ -207,11 +213,11 @@
             // At high zoom, RWGPS hides the marker between sparse waypoints.
             // Debounce to avoid rapid tracking→manual oscillation.
             if (!trackingDeactivateTimer) {
+              startLingerTimer();
               trackingDeactivateTimer = setTimeout(function () {
                 trackingDeactivateTimer = null;
                 trackingActive = false;
-                startLingerTimer();
-              }, 200);
+              }, TRACKING_LOST_DEBOUNCE);
             }
             break;
         }
@@ -337,18 +343,21 @@
     cursorX = event.clientX;
     cursorY = event.clientY;
 
-    // Fallback: if cursor keeps moving but RWGPS stops sending tracking
-    // events (e.g. cursor drifted off route without triggering setVisible),
-    // deactivate tracking so manual mode can take over.
+    // Deactivate tracking when RWGPS stops sending position updates.
+    // At high zoom (500ms): quick handoff to manual mode for gap filling.
+    // At low zoom (2s): safety net in case RWGPS destroys the marker
+    // without calling setVisible(false).
     if (trackingActive && !trackingDeactivateTimer) {
       var dx = cursorX - prevX;
       var dy = cursorY - prevY;
       if (dx * dx + dy * dy > 4) { // moved more than 2px
+        var z = lastKnownZoom || 15;
+        var deactivateDelay = z >= MANUAL_MODE_MIN_ZOOM ? DEACTIVATE_DELAY_HIGH_ZOOM : DEACTIVATE_DELAY_LOW_ZOOM;
+        startLingerTimer();
         trackingDeactivateTimer = setTimeout(function () {
           trackingDeactivateTimer = null;
           trackingActive = false;
-          startLingerTimer();
-        }, 500);
+        }, deactivateDelay);
       }
     }
 
@@ -357,7 +366,7 @@
     // (tracking marker hidden between sparse waypoints at high zoom).
     if (!trackingActive && flatCoords.length >= 2) {
       if (throttleTimer) return;
-      throttleTimer = setTimeout(function () { throttleTimer = null; }, 80);
+      throttleTimer = setTimeout(function () { throttleTimer = null; }, TRACKING_UPDATE_INTERVAL);
 
       const rect = getMapRect();
       const x = event.clientX - rect.left;
