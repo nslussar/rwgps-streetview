@@ -12,6 +12,10 @@ h1 {
   margin: 0 0 12px;
 }
 
+.version {
+  white-space: nowrap;
+}
+
 .field {
   margin-bottom: 10px;
 }
