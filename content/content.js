@@ -19,6 +19,8 @@
   const DEACTIVATE_DELAY_HIGH_ZOOM = 500; // quick handoff to manual mode
   const DEACTIVATE_DELAY_LOW_ZOOM = 2000; // safety net when marker is destroyed
   const TRACKING_LOST_DEBOUNCE = 200; // debounce rapid show/hide oscillation
+  const MERCATOR_METERS_PER_PX_Z0 = 156543; // meters/pixel at zoom 0, equator (Earth circumference / 256)
+  const METERS_PER_DEGREE = 111000;          // approx meters per degree of latitude
   let apiKey = '';
   let enabled = true;
   let keyValid = null; // null = untested, true = valid, false = invalid
@@ -444,9 +446,9 @@
       return;
     }
 
-    var metersPerPixel = 156543 * Math.cos(latlng.lat * Math.PI / 180) / Math.pow(2, z);
+    var metersPerPixel = MERCATOR_METERS_PER_PX_Z0 * Math.cos(latlng.lat * Math.PI / 180) / Math.pow(2, z);
     var thresholdMeters = 10 * metersPerPixel;
-    var distMeters = nearest.distanceDeg * 111000 * Math.cos(latlng.lat * Math.PI / 180);
+    var distMeters = nearest.distanceDeg * METERS_PER_DEGREE * Math.cos(latlng.lat * Math.PI / 180);
 
     if (distMeters > thresholdMeters) {
       startLingerTimer();
