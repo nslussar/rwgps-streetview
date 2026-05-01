@@ -88,8 +88,45 @@ h1 {
   display: block;
 }
 
-#radius {
-  width: 80px;
+#radius,
+#apiCap {
+  width: 100px;
+}
+
+.usage-field .usage-line {
+  font-size: 12px;
+  color: #444;
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+  line-height: 1.5;
+}
+
+.usage-field .usage-line.muted {
+  color: #888;
+}
+
+.usage-field .usage-line.hint {
+  font-size: 11px;
+  color: #999;
+  margin-top: 4px;
+}
+
+.usage-field .link-btn {
+  background: none;
+  border: none;
+  padding: 0 0 0 4px;
+  color: #4285f4;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.usage-field .link-btn:hover {
+  text-decoration: underline;
+}
+
+.usage-field.over-cap #usageSv {
+  color: #c0392b;
+  font-weight: 600;
 }
 
 .toggle-field {

@@ -65,6 +65,7 @@
   // --- Initialization ---
 
   function init() {
+    RwgpsApiBudget.init();
     chrome.storage.sync.get(['apiKey', 'enabled', 'radius'], function (result) {
       apiKey = result.apiKey || '';
       enabled = result.enabled !== false;
@@ -127,6 +128,10 @@
       keyValid = false;
       console.log('[RWGPS Street View] API key validation failed (test image error). Try opening this URL in a browser tab to see the error: ' + testUrl);
     };
+    if (!RwgpsApiBudget.tryStreetView()) {
+      console.log('[RWGPS Street View] API key validation skipped — monthly cap reached.');
+      return;
+    }
     testImg.src = testUrl;
   }
 
@@ -491,6 +496,7 @@
     if (lastGeocodedPoint && RwgpsGeo.distanceMeters(lastGeocodedPoint, { lat: lat, lng: lng }) < 30) {
       return;
     }
+    RwgpsApiBudget.countGeocode();
     lastGeocodedPoint = { lat: lat, lng: lng };
     var id = ++geocodeCounter;
     window.postMessage({
@@ -554,12 +560,28 @@
   var loadingSpinnerTimer = null;
   var hasLoadedImage = false;
 
+  function showCapBlockedUI() {
+    overlayImg.style.display = 'none';
+    loadingEl.style.display = 'none';
+    clearTimeout(loadingSpinnerTimer);
+    noCoverageEl.textContent = 'Monthly API request limit reached';
+    noCoverageEl.style.display = 'flex';
+    streetLabelEl.style.display = 'none';
+    positionOverlay();
+    showOverlay();
+  }
+
   function updateStreetViewImage(lat, lng, heading) {
     if (keyValid === false) {
       overlayImg.style.display = 'none';
       noCoverageEl.textContent = 'Invalid API key — check extension settings';
       noCoverageEl.style.display = 'flex';
       streetLabelEl.style.display = 'none';
+      return;
+    }
+
+    if (!RwgpsApiBudget.tryStreetView()) {
+      showCapBlockedUI();
       return;
     }
 

@@ -29,7 +29,7 @@ You need a Google Maps API key with the **Street View Static API** enabled:
 4. Go to **Credentials** > **Create Credentials** > **API Key**
 5. Recommended: restrict the key to **Street View Static API** only
 
-The Street View Static API includes $200/month of free usage (~28,500 requests).
+The Street View Static API includes 10,000 free requests per month.
 
 ## Usage
 

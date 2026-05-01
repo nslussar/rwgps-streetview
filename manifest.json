@@ -13,10 +13,13 @@
       "128": "icons/icon128.png"
     }
   },
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
       "matches": ["https://ridewithgps.com/routes/*"],
-      "js": ["lib/geo.js", "content/content.js"],
+      "js": ["content/api-budget.js", "lib/geo.js", "content/content.js"],
       "css": ["content/overlay.css"],
       "run_at": "document_idle"
     }
