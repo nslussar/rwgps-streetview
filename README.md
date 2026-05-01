@@ -29,10 +29,14 @@ You need a Google Maps API key with the **Street View Static API** enabled:
 4. Go to **Credentials** > **Create Credentials** > **API Key**
 5. Recommended: restrict the key to **Street View Static API** only
 
-The Street View Static API includes 10,000 free requests per month.
+The Street View Static API includes 10,000 free requests per month. See [Google Maps Platform pricing](https://developers.google.com/maps/billing-and-pricing/pricing#streetview-pricing) for current rates above the free tier.
 
 ## Usage
 
 1. Open a route in the RideWithGPS route planner (works both in route preview & edit modes)
 2. Select **Google Maps** as the map type
 3. Hover near the route line -- a Street View preview appears showing the road ahead
+
+## API Usage & Cap
+
+The extension enforces a configurable monthly cap on Street View Static API requests (default **10,000**, Google's free tier). The popup shows the monthly total, cap, and cache hits (which don't count toward the cap or bill against your key).
