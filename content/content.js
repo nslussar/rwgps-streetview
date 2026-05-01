@@ -20,11 +20,20 @@
   const DEACTIVATE_DELAY_LOW_ZOOM = 2000; // safety net when marker is destroyed
   const TRACKING_LOST_DEBOUNCE = 200; // debounce rapid show/hide oscillation
   const DEFAULT_RADIUS = 10; // meters — Street View panorama search radius
+  const DEFAULT_BUCKET_METERS = 10;
+  const DEFAULT_SKIP_THRESHOLD_METERS = 10;
+  const DEFAULT_DWELL_MS = 200;
+  const HEADING_BUCKET_DEG = 15;
   const MERCATOR_METERS_PER_PX_Z0 = 156543; // meters/pixel at zoom 0, equator (Earth circumference / 256)
   const METERS_PER_DEGREE = 111000;          // approx meters per degree of latitude
   let apiKey = '';
   let enabled = true;
   let radius = DEFAULT_RADIUS;
+  let bucketMeters = DEFAULT_BUCKET_METERS;
+  let skipThresholdMeters = DEFAULT_SKIP_THRESHOLD_METERS;
+  let dwellMs = DEFAULT_DWELL_MS;
+  let dwellTimer = null;
+  let pendingDwellArgs = null;
   let keyValid = null; // null = untested, true = valid, false = invalid
   let routeCoords = []; // array of arrays of {lat, lng}
   let flatCoords = [];  // flattened for nearest-point search
@@ -66,10 +75,13 @@
 
   function init() {
     RwgpsApiBudget.init();
-    chrome.storage.sync.get(['apiKey', 'enabled', 'radius'], function (result) {
+    chrome.storage.sync.get(['apiKey', 'enabled', 'radius', 'bucketMeters', 'skipThresholdMeters', 'dwellMs'], function (result) {
       apiKey = result.apiKey || '';
       enabled = result.enabled !== false;
       radius = result.radius || DEFAULT_RADIUS;
+      bucketMeters = numOr(result.bucketMeters, DEFAULT_BUCKET_METERS);
+      skipThresholdMeters = numOr(result.skipThresholdMeters, DEFAULT_SKIP_THRESHOLD_METERS);
+      dwellMs = numOr(result.dwellMs, DEFAULT_DWELL_MS);
 
       if (!apiKey) {
         console.log('[RWGPS Street View] No API key configured. Will initialize when key is set.');
@@ -107,7 +119,20 @@
       if (changes.radius) {
         radius = changes.radius.newValue || DEFAULT_RADIUS;
       }
+      if (changes.bucketMeters) {
+        bucketMeters = numOr(changes.bucketMeters.newValue, DEFAULT_BUCKET_METERS);
+      }
+      if (changes.skipThresholdMeters) {
+        skipThresholdMeters = numOr(changes.skipThresholdMeters.newValue, DEFAULT_SKIP_THRESHOLD_METERS);
+      }
+      if (changes.dwellMs) {
+        dwellMs = numOr(changes.dwellMs.newValue, DEFAULT_DWELL_MS);
+      }
     });
+  }
+
+  function numOr(v, fallback) {
+    return (typeof v === 'number' && v >= 0) ? v : fallback;
   }
 
   function validateApiKey() {
@@ -420,8 +445,7 @@
       markerScreenY = rect.top + data.containerPixel.y;
     }
 
-    // Skip update if within 5m of last shown point
-    if (lastShownPoint && RwgpsGeo.distanceMeters(lastShownPoint, data) < 5) {
+    if (lastShownPoint && RwgpsGeo.distanceMeters(lastShownPoint, data) < skipThresholdMeters) {
       positionOverlay();
       showOverlay();
       return;
@@ -435,7 +459,7 @@
     }
 
     lastShownPoint = { lat: data.lat, lng: data.lng };
-    updateStreetViewImage(data.lat, data.lng, heading || 0);
+    scheduleStreetViewUpdate(data.lat, data.lng, heading || 0);
     positionOverlay();
     showOverlay();
   }
@@ -472,7 +496,7 @@
       lastActiveMode = 'manual';
     }
 
-    if (lastShownPoint && RwgpsGeo.distanceMeters(lastShownPoint, nearest) < 5) {
+    if (lastShownPoint && RwgpsGeo.distanceMeters(lastShownPoint, nearest) < skipThresholdMeters) {
       positionOverlay();
       return;
     }
@@ -484,7 +508,7 @@
     updateHeading(heading);
 
     lastShownPoint = { lat: nearest.lat, lng: nearest.lng };
-    updateStreetViewImage(nearest.lat, nearest.lng, heading);
+    scheduleStreetViewUpdate(nearest.lat, nearest.lng, heading);
     positionOverlay();
     showOverlay();
   }
@@ -571,6 +595,21 @@
     showOverlay();
   }
 
+  function scheduleStreetViewUpdate(lat, lng, heading) {
+    if (dwellMs <= 0) {
+      updateStreetViewImage(lat, lng, heading);
+      return;
+    }
+    pendingDwellArgs = [lat, lng, heading];
+    clearTimeout(dwellTimer);
+    dwellTimer = setTimeout(function () {
+      var a = pendingDwellArgs;
+      pendingDwellArgs = null;
+      dwellTimer = null;
+      if (a) updateStreetViewImage(a[0], a[1], a[2]);
+    }, dwellMs);
+  }
+
   function updateStreetViewImage(lat, lng, heading) {
     if (keyValid === false) {
       overlayImg.style.display = 'none';
@@ -585,12 +624,15 @@
       return;
     }
 
-    requestGeocode(lat, lng);
+    var b = RwgpsGeo.bucketLatLng(lat, lng, bucketMeters);
+    var h = RwgpsGeo.bucketHeading(heading, HEADING_BUCKET_DEG);
+
+    requestGeocode(b.lat, b.lng);
 
     var url = 'https://maps.googleapis.com/maps/api/streetview'
       + '?size=400x250'
-      + '&location=' + lat.toFixed(6) + ',' + lng.toFixed(6)
-      + '&heading=' + Math.round(heading)
+      + '&location=' + b.lat.toFixed(6) + ',' + b.lng.toFixed(6)
+      + '&heading=' + Math.round(h)
       + '&radius=' + radius
       + '&pitch=-5'
       + '&fov=90'
@@ -686,6 +728,9 @@
     markerScreenX = null;
     markerScreenY = null;
     cancelLingerTimer();
+    clearTimeout(dwellTimer);
+    dwellTimer = null;
+    pendingDwellArgs = null;
     streetLabelEl.style.display = 'none';
     hideHeading();
     loadingEl.style.display = 'none';

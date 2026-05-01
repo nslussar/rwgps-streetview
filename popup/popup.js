@@ -1,9 +1,15 @@
 var DEFAULT_RADIUS = 10;
+var DEFAULT_BUCKET_METERS = 10;
+var DEFAULT_SKIP_THRESHOLD_METERS = 10;
+var DEFAULT_DWELL_MS = 200;
 
 document.addEventListener('DOMContentLoaded', function () {
   const apiKeyInput = document.getElementById('apiKey');
   const enabledInput = document.getElementById('enabled');
   const radiusInput = document.getElementById('radius');
+  const bucketMetersInput = document.getElementById('bucketMeters');
+  const skipThresholdMetersInput = document.getElementById('skipThresholdMeters');
+  const dwellMsInput = document.getElementById('dwellMs');
   const apiCapInput = document.getElementById('apiCap');
   const apiCapEnabledInput = document.getElementById('apiCapEnabled');
   const resetBtn = document.getElementById('resetUsage');
@@ -74,16 +80,27 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  chrome.storage.sync.get(['apiKey', 'enabled', 'radius', 'apiCap', 'apiCapEnabled'], function (result) {
-    apiKeyInput.value = result.apiKey || '';
-    enabledInput.checked = result.enabled !== false;
-    radiusInput.value = result.radius || DEFAULT_RADIUS;
-    state.cap = (typeof result.apiCap === 'number' && result.apiCap >= 0) ? result.apiCap : RwgpsUsage.DEFAULT_CAP;
-    state.capEnabled = result.apiCapEnabled !== false;
-    apiCapInput.value = state.cap;
-    apiCapEnabledInput.checked = state.capEnabled;
-    render();
-  });
+  function numOr(v, fallback) {
+    return (typeof v === 'number' && v >= 0) ? v : fallback;
+  }
+
+  chrome.storage.sync.get(
+    ['apiKey', 'enabled', 'radius', 'apiCap', 'apiCapEnabled',
+     'bucketMeters', 'skipThresholdMeters', 'dwellMs'],
+    function (result) {
+      apiKeyInput.value = result.apiKey || '';
+      enabledInput.checked = result.enabled !== false;
+      radiusInput.value = result.radius || DEFAULT_RADIUS;
+      bucketMetersInput.value = numOr(result.bucketMeters, DEFAULT_BUCKET_METERS);
+      skipThresholdMetersInput.value = numOr(result.skipThresholdMeters, DEFAULT_SKIP_THRESHOLD_METERS);
+      dwellMsInput.value = numOr(result.dwellMs, DEFAULT_DWELL_MS);
+      state.cap = numOr(result.apiCap, RwgpsUsage.DEFAULT_CAP);
+      state.capEnabled = result.apiCapEnabled !== false;
+      apiCapInput.value = state.cap;
+      apiCapEnabledInput.checked = state.capEnabled;
+      render();
+    }
+  );
 
   chrome.storage.local.get(['apiUsage'], function (result) {
     applyMonthly(result.apiUsage);
@@ -130,6 +147,23 @@ document.addEventListener('DOMContentLoaded', function () {
     }, 400);
   });
 
+  function debouncedNumberSave(input, key, validator) {
+    var timer = null;
+    input.addEventListener('input', function () {
+      clearTimeout(timer);
+      timer = setTimeout(function () {
+        var val = parseInt(input.value, 10);
+        if (!isNaN(val) && validator(val)) {
+          var patch = {}; patch[key] = val;
+          chrome.storage.sync.set(patch);
+        }
+      }, 400);
+    });
+  }
+  debouncedNumberSave(bucketMetersInput, 'bucketMeters', function (v) { return v >= 0 && v <= 100; });
+  debouncedNumberSave(skipThresholdMetersInput, 'skipThresholdMeters', function (v) { return v >= 0 && v <= 200; });
+  debouncedNumberSave(dwellMsInput, 'dwellMs', function (v) { return v >= 0 && v <= 1000; });
+
   var capSaveTimer = null;
   apiCapInput.addEventListener('input', function () {
     clearTimeout(capSaveTimer);
@@ -161,6 +195,15 @@ document.addEventListener('DOMContentLoaded', function () {
         state.capEnabled = changes.apiCapEnabled.newValue !== false;
         apiCapEnabledInput.checked = state.capEnabled;
         changed = true;
+      }
+      if (changes.bucketMeters) {
+        bucketMetersInput.value = numOr(changes.bucketMeters.newValue, DEFAULT_BUCKET_METERS);
+      }
+      if (changes.skipThresholdMeters) {
+        skipThresholdMetersInput.value = numOr(changes.skipThresholdMeters.newValue, DEFAULT_SKIP_THRESHOLD_METERS);
+      }
+      if (changes.dwellMs) {
+        dwellMsInput.value = numOr(changes.dwellMs.newValue, DEFAULT_DWELL_MS);
       }
     }
     if (area === 'local' && changes.apiUsage) {

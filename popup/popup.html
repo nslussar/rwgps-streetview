@@ -22,6 +22,24 @@
     <input type="number" id="radius" min="1" max="100" value="10">
   </div>
 
+  <div class="field">
+    <label for="bucketMeters">Bucket size (meters)</label>
+    <input type="number" id="bucketMeters" min="0" max="100" value="10">
+    <span class="note">0 = off</span>
+  </div>
+
+  <div class="field">
+    <label for="skipThresholdMeters">Skip threshold (meters)</label>
+    <input type="number" id="skipThresholdMeters" min="0" max="200" value="10">
+    <span class="note">0 = always update</span>
+  </div>
+
+  <div class="field">
+    <label for="dwellMs">Dwell delay (ms)</label>
+    <input type="number" id="dwellMs" min="0" max="1000" step="50" value="200">
+    <span class="note">0 = immediate</span>
+  </div>
+
   <div class="field toggle-field">
     <label for="enabled">Enabled</label>
     <input type="checkbox" id="enabled" checked>
