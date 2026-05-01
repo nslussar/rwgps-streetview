@@ -10,20 +10,21 @@
  *     here since it's invoked from the page-bridge MAIN-world context).
  *
  * Cap is enforced against `streetviewNetwork` only — cache hits don't bill.
+ *
+ * Until the local-storage read completes, tryStreetView() returns false to
+ * preserve the "no surprise billing" guarantee — we'd rather block one
+ * request briefly than overshoot the cap on a near-boundary page reload.
  */
 (function () {
   'use strict';
 
-  var DEFAULT_CAP = 10000;
-  var GEOCODE_MSG = 'RWGPS_SV_GEOCODE';
-  var PAGE_LOAD_MSG = 'RWGPS_SV_PAGE_LOAD';
-
-  var cap = DEFAULT_CAP;
+  var cap = RwgpsUsage.DEFAULT_CAP;
   var capEnabled = true;
   var streetviewNetwork = 0;
+  var localLoaded = false;
 
-  // Tolerate stale content scripts (after extension reload) — chrome.runtime
-  // throws "Extension context invalidated" until the page is refreshed.
+  // Stale content scripts (after extension reload) throw "Extension context
+  // invalidated" until the page is refreshed. Swallow.
   function send(type) {
     try {
       chrome.runtime.sendMessage({ type: type }, function () {
@@ -33,22 +34,23 @@
   }
 
   function init() {
-    send(PAGE_LOAD_MSG);
+    send(RwgpsUsage.PAGE_LOAD_MSG);
 
     chrome.storage.sync.get(['apiCap', 'apiCapEnabled'], function (s) {
-      cap = (typeof s.apiCap === 'number' && s.apiCap >= 0) ? s.apiCap : DEFAULT_CAP;
+      cap = (typeof s.apiCap === 'number' && s.apiCap >= 0) ? s.apiCap : RwgpsUsage.DEFAULT_CAP;
       capEnabled = s.apiCapEnabled !== false;
     });
 
     chrome.storage.local.get(['apiUsage'], function (l) {
       streetviewNetwork = (l.apiUsage && l.apiUsage.streetviewNetwork) || 0;
+      localLoaded = true;
     });
 
     chrome.storage.onChanged.addListener(function (changes, area) {
       if (area === 'sync') {
         if (changes.apiCap) {
           var v = changes.apiCap.newValue;
-          cap = (typeof v === 'number' && v >= 0) ? v : DEFAULT_CAP;
+          cap = (typeof v === 'number' && v >= 0) ? v : RwgpsUsage.DEFAULT_CAP;
         }
         if (changes.apiCapEnabled) {
           capEnabled = changes.apiCapEnabled.newValue !== false;
@@ -61,11 +63,13 @@
   }
 
   function tryStreetView() {
+    // Block until we know the real count — preserves cap on near-boundary reloads.
+    if (capEnabled && !localLoaded) return false;
     return !(capEnabled && streetviewNetwork >= cap);
   }
 
   function countGeocode() {
-    send(GEOCODE_MSG);
+    send(RwgpsUsage.GEOCODE_MSG);
   }
 
   window.RwgpsApiBudget = {

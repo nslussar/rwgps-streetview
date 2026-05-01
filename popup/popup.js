@@ -1,5 +1,4 @@
 var DEFAULT_RADIUS = 10;
-var DEFAULT_CAP = 10000;
 
 document.addEventListener('DOMContentLoaded', function () {
   const apiKeyInput = document.getElementById('apiKey');
@@ -29,7 +28,7 @@ document.addEventListener('DOMContentLoaded', function () {
     sessionSv: 0,
     sessionSvCached: 0,
     sessionGeo: 0,
-    cap: DEFAULT_CAP,
+    cap: RwgpsUsage.DEFAULT_CAP,
     capEnabled: true
   };
 
@@ -79,7 +78,7 @@ document.addEventListener('DOMContentLoaded', function () {
     apiKeyInput.value = result.apiKey || '';
     enabledInput.checked = result.enabled !== false;
     radiusInput.value = result.radius || DEFAULT_RADIUS;
-    state.cap = (typeof result.apiCap === 'number' && result.apiCap >= 0) ? result.apiCap : DEFAULT_CAP;
+    state.cap = (typeof result.apiCap === 'number' && result.apiCap >= 0) ? result.apiCap : RwgpsUsage.DEFAULT_CAP;
     state.capEnabled = result.apiCapEnabled !== false;
     apiCapInput.value = state.cap;
     apiCapEnabledInput.checked = state.capEnabled;
@@ -155,7 +154,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (area === 'sync') {
       if (changes.apiCap) {
         var v = changes.apiCap.newValue;
-        state.cap = (typeof v === 'number' && v >= 0) ? v : DEFAULT_CAP;
+        state.cap = (typeof v === 'number' && v >= 0) ? v : RwgpsUsage.DEFAULT_CAP;
         changed = true;
       }
       if (changes.apiCapEnabled) {

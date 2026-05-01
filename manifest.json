@@ -20,7 +20,7 @@
   "content_scripts": [
     {
       "matches": ["https://ridewithgps.com/routes/*"],
-      "js": ["content/api-budget.js", "lib/geo.js", "content/content.js"],
+      "js": ["lib/usage.js", "content/api-budget.js", "lib/geo.js", "content/content.js"],
       "css": ["content/overlay.css"],
       "run_at": "document_idle"
     }

@@ -139,6 +139,9 @@ function resetTab(tabId) {
 }
 
 function resetAllSessions() {
+  // We deliberately don't touch cachedUsage — monthly counter is independent
+  // of session state. ensureLoaded() still triggers a local read on first
+  // use because cachedUsage stays null here.
   sessionByTab = {};
   perTabDeltas = {};
   lastBadgeText = {};
