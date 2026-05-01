@@ -64,11 +64,13 @@ Supporting files:
 
 ## Testing
 
-Manual testing only — load unpacked in `chrome://extensions`, test on ridewithgps.com route editor with Google Maps selected. Check browser console for `[RWGPS SV Bridge]` and `[RWGPS Street View]` log messages.
+- **Unit tests** (`test/*.test.js`) cover the pure helpers in `lib/geo.js` and `lib/usage.js`. Run via `make test` (uses Node's built-in `node --test`, no npm/deps). Add a test alongside any change to those files. Chrome-extension surfaces (`content/`, `background.js`, `popup/`) are not unit-tested — they need DOM/`chrome.*`/Google Maps mocks.
+- **Manual testing** for everything else: load unpacked in `chrome://extensions`, test on ridewithgps.com route editor with Google Maps selected. Check browser console for `[RWGPS SV Bridge]` and `[RWGPS Street View]` log messages.
+- **CI**: `.github/workflows/test.yml` runs `node --test` on push to main and on PRs; `release.yml` runs the same step before building the zip, so a failing test blocks publishing.
 
 ## Working on this codebase
 
-- No tests, no linter, no build step. `node --check <file>` is the only static sanity gate; otherwise reload unpacked and verify in the browser.
+- No build step, no linter, no npm. `node --check <file>` is a quick syntax gate; `make test` runs the unit suite for `lib/`. For anything touching `content/`, `background.js`, or `popup/`, reload unpacked and verify in the browser.
 - The extension runs across three contexts that each have their own DevTools console:
   - Page console (RWGPS tab DevTools) — `[RWGPS Street View]` and the page-bridge logs
   - Service-worker console (`chrome://extensions` → "Service worker") — `[RWGPS SV bg]` logs

@@ -1,7 +1,10 @@
 VERSION := $(shell git describe --tags --exact-match 2>/dev/null || echo "dev")
 VERSION := $(VERSION:v%=%)
 
-.PHONY: build clean release
+.PHONY: build clean release test
+
+test:
+	node --test test/*.test.js
 
 build:
 	mkdir -p build
