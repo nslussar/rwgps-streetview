@@ -23,6 +23,10 @@ Three execution contexts:
   - Linger timer starts at moment of tracking loss so total hide time is predictable
   - Manual mode activates at zoom >= 13
   - Clicking the overlay opens Google Maps Street View in a new tab
+  - Three configurable request-cost levers (`chrome.storage.sync` keys, defaults in parens):
+    `bucketMeters` (10) snaps lat/lng/heading before building the URL so re-hovers hit the browser HTTP cache;
+    `skipThresholdMeters` (10) suppresses updates within N meters of the last shown point (no request, no cache lookup);
+    `dwellMs` (200) defers the SV image fetch until the cursor settles (overlay show/position/heading still update immediately).
 - **Service worker** (`background.js`) — Sole writer for all API counter state.
   - `chrome.webRequest.onCompleted` observes Street View Static requests; `details.fromCache` splits network (billed) vs cached.
   - Receives `GEOCODE_MSG`/`PAGE_LOAD_MSG`/`RESET_MSG` from content + popup. Coalesces writes to a 1s flush.
@@ -46,7 +50,8 @@ Supporting files:
 - The `&radius` parameter on Street View Static API requests controls how far (in meters) to search for the nearest panorama. Configurable in the popup (default: 10m).
 - Street View Static API has a minimum image size (between 10x10 and 100x100). Use at least 100x100 for validation/test requests.
 - **Request counter & cap**: monthly counter (`apiUsage` in `chrome.storage.local`) gates Street View calls against a configurable cap (default 10000, matches Google's billable threshold). Cap applies only to `streetviewNetwork` — cache hits and geocoding don't count toward it. Per-tab session counter (`sessionByTab` in `chrome.storage.session`) resets on each page load via `PAGE_LOAD_MSG`.
-- **Billing nuances**: NOT_FOUND / ZERO_RESULTS / DATA_NOT_AVAILABLE responses from Street View Static ARE billable (per Google's reporting docs). `&return_error_code=true` only changes response format, not billing. Browser HTTP cache hits do NOT bill (no request reaches Google) — detected via `chrome.webRequest`'s `details.fromCache`.
+- **Billing nuances**: NOT_FOUND / ZERO_RESULTS / DATA_NOT_AVAILABLE responses from Street View Static ARE billable (per Google's reporting docs). `&return_error_code=true` only changes response format, not billing. Browser HTTP cache hits do NOT bill (no request reaches Google) — detected via `chrome.webRequest`'s `details.fromCache`. **`webRequest.onCompleted` does fire with `fromCache:true` for `<img>` cache hits when URLs match exactly** — don't assume otherwise; if the cache counter looks broken, suspect URL instability (e.g. bucketing producing different outputs for nearby points) before suspecting the webRequest API.
+- **Bucketing gotcha** (`lib/geo.js:bucketLatLng`): snap lat FIRST, then derive `cosLat` from the snapped lat. Computing `cosLat` from the raw input lat causes points in the same lat-cell to use slightly different `lngStep` values, which can flip lng across a bucket boundary and produce distinct URLs (cache misses) for points well inside one logical bucket.
 - **`chrome.webRequest` permissions gotcha**: webRequest events fire only when the extension has `host_permissions` for BOTH the destination URL AND the initiator page. Manifest declares both `https://maps.googleapis.com/*` and `https://ridewithgps.com/*` for this reason — `content_scripts.matches` is NOT a substitute despite chrome://extensions UI conflating them under "Site access".
 
 ## Build and release
@@ -60,3 +65,14 @@ Supporting files:
 ## Testing
 
 Manual testing only — load unpacked in `chrome://extensions`, test on ridewithgps.com route editor with Google Maps selected. Check browser console for `[RWGPS SV Bridge]` and `[RWGPS Street View]` log messages.
+
+## Working on this codebase
+
+- No tests, no linter, no build step. `node --check <file>` is the only static sanity gate; otherwise reload unpacked and verify in the browser.
+- The extension runs across three contexts that each have their own DevTools console:
+  - Page console (RWGPS tab DevTools) — `[RWGPS Street View]` and the page-bridge logs
+  - Service-worker console (`chrome://extensions` → "Service worker") — `[RWGPS SV bg]` logs
+  - Popup DevTools (right-click popup → Inspect)
+
+  When debugging cross-context behavior (counter discrepancies, message passing, cache accounting), add `console.log` on BOTH sides and watch BOTH consoles — the asymmetry between what each side sees is usually where the bug lives.
+- Don't theorize about Chrome internals; verify with a log. (The "`<img>` memory cache short-circuits webRequest" theory was wrong — bucketing was producing unstable URLs and webRequest was working fine.)
