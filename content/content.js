@@ -34,7 +34,6 @@
   let dwellMs = DEFAULT_DWELL_MS;
   let dwellTimer = null;
   let pendingDwellArgs = null;
-  let seenUrls = new Set();
   let keyValid = null; // null = untested, true = valid, false = invalid
   let routeCoords = []; // array of arrays of {lat, lng}
   let flatCoords = [];  // flattened for nearest-point search
@@ -639,17 +638,6 @@
       + '&fov=90'
       + '&key=' + encodeURIComponent(apiKey)
       + '&return_error_code=true';
-
-    // chrome.webRequest doesn't see <img> memory-cache hits — track them here.
-    if (seenUrls.has(url)) {
-      try {
-        chrome.runtime.sendMessage({ type: RwgpsUsage.SV_CACHE_HIT_MSG }, function () {
-          if (chrome.runtime.lastError) { /* swallow */ }
-        });
-      } catch (_) { /* swallow */ }
-    } else {
-      seenUrls.add(url);
-    }
 
     // Preload offscreen so we don't cancel in-flight loads on the visible img.
     // Only swap the visible src once the preload completes.

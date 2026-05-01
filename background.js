@@ -170,14 +170,9 @@ chrome.tabs.onRemoved.addListener(function (tabId) {
   }
 });
 
-// Only network requests are credited from webRequest. Cache hits are reported
-// by the content script via SV_CACHE_HIT_MSG instead — Chrome short-circuits
-// identical <img> URLs through the renderer's memory cache without firing
-// webRequest events, so onCompleted misses most in-session cache hits.
 chrome.webRequest.onCompleted.addListener(function (details) {
   if (details.url.indexOf(STREETVIEW_METADATA_PATH) !== -1) return;
-  if (details.fromCache) return;
-  recordIncrement(details.tabId, 'network');
+  recordIncrement(details.tabId, details.fromCache ? 'cached' : 'network');
 }, { urls: [STREETVIEW_URL_FILTER] });
 
 chrome.runtime.onMessage.addListener(function (msg, sender) {
@@ -185,8 +180,6 @@ chrome.runtime.onMessage.addListener(function (msg, sender) {
   var tabId = (sender && sender.tab) ? sender.tab.id : null;
   if (msg.type === RwgpsUsage.GEOCODE_MSG) {
     recordIncrement(tabId, 'geocode');
-  } else if (msg.type === RwgpsUsage.SV_CACHE_HIT_MSG) {
-    recordIncrement(tabId, 'cached');
   } else if (msg.type === RwgpsUsage.PAGE_LOAD_MSG) {
     if (tabId != null) resetTab(tabId);
   } else if (msg.type === RwgpsUsage.RESET_MSG) {
