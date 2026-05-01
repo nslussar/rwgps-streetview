@@ -26,11 +26,9 @@ h1 {
 
 .field label {
   display: block;
-  font-size: 11px;
-  font-weight: 500;
-  color: #666;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #333;
   margin-bottom: 5px;
 }
 
@@ -99,22 +97,50 @@ h1 {
   margin: 0;
 }
 
-.usage-field .usage-line {
+.usage-field .usage-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.usage-field .usage-title {
   font-size: 12px;
-  color: #444;
-  font-variant-numeric: tabular-nums;
-  margin-top: 2px;
-  line-height: 1.5;
+  font-weight: 600;
+  color: #333;
 }
 
-.usage-field .usage-line.muted {
-  color: #888;
-}
-
-.usage-field .usage-line.hint {
+.usage-field .usage-month {
   font-size: 11px;
-  color: #999;
-  margin-top: 4px;
+  color: #888;
+  flex: 1;
+}
+
+.usage-field .usage-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 12px;
+  row-gap: 2px;
+  margin: 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-field .usage-grid dt {
+  color: #666;
+}
+
+.usage-field .usage-grid dd {
+  margin: 0;
+  text-align: right;
+  color: #333;
+}
+
+.usage-field .usage-session {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #888;
+  font-variant-numeric: tabular-nums;
 }
 
 .usage-field .link-btn {
@@ -144,11 +170,29 @@ h1 {
 
 .toggle-field label {
   margin-bottom: 0;
-  font-size: 13px;
-  font-weight: 500;
-  color: #333;
-  text-transform: none;
-  letter-spacing: 0;
+}
+
+.cap-field {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cap-field .cap-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 0;
+}
+
+.cap-field input[type="number"] {
+  width: 80px;
+}
+
+.cap-field .cap-suffix {
+  color: #666;
+  font-size: 12px;
 }
 
 .advanced {

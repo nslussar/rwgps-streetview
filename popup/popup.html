@@ -17,6 +17,41 @@
     </div>
   </div>
 
+  <div class="field toggle-field">
+    <label for="enabled">Enabled</label>
+    <input type="checkbox" id="enabled" checked>
+  </div>
+
+  <div class="field usage-field">
+    <div class="usage-header">
+      <span class="usage-title">Usage</span>
+      <span id="usageMonth" class="usage-month">—</span>
+      <button type="button" id="resetUsage" class="link-btn" title="Reset monthly counters">reset</button>
+    </div>
+    <dl class="usage-grid">
+      <dt>Street View</dt>
+      <dd><span id="usageSv">0</span> / <span id="usageCapDisplay">10,000</span></dd>
+      <dt>Cached</dt>
+      <dd><span id="usageSvCached">0</span></dd>
+      <dt>Geocoding</dt>
+      <dd><span id="usageGeo">0</span></dd>
+    </dl>
+    <div class="usage-session">
+      This page: <span id="sessionSv">0</span> SV ·
+      <span id="sessionSvCached">0</span> cached ·
+      <span id="sessionGeo">0</span> geo
+    </div>
+  </div>
+
+  <div class="field cap-field">
+    <label class="cap-toggle">
+      <input type="checkbox" id="apiCapEnabled" checked>
+      <span>Enforce monthly cap of</span>
+    </label>
+    <input type="number" id="apiCap" min="0" step="100" value="10000">
+    <span class="cap-suffix">requests</span>
+  </div>
+
   <details class="advanced">
     <summary>Advanced</summary>
 
@@ -44,38 +79,6 @@
       <p class="field-help">Wait for the cursor to stop before fetching, so quick sweeps don't fire requests. Set 0 to fetch immediately.</p>
     </div>
   </details>
-
-  <div class="field toggle-field">
-    <label for="enabled">Enabled</label>
-    <input type="checkbox" id="enabled" checked>
-  </div>
-
-  <div class="field usage-field">
-    <label>API usage</label>
-    <div class="usage-line">
-      <span id="usageMonth">—</span>:
-      <span id="usageSv">0</span> / <span id="usageCapDisplay">10,000</span> Street View,
-      <span id="usageSvCached">0</span> cached,
-      <span id="usageGeo">0</span> geocoding
-      <button type="button" id="resetUsage" class="link-btn" title="Reset monthly counters">reset</button>
-    </div>
-    <div class="usage-line muted">
-      This page load:
-      <span id="sessionSv">0</span> Street View,
-      <span id="sessionSvCached">0</span> cached,
-      <span id="sessionGeo">0</span> geocoding
-    </div>
-  </div>
-
-  <div class="field">
-    <label for="apiCap">Monthly Street View cap</label>
-    <input type="number" id="apiCap" min="0" step="100" value="10000">
-  </div>
-
-  <div class="field toggle-field">
-    <label for="apiCapEnabled">Enforce cap</label>
-    <input type="checkbox" id="apiCapEnabled" checked>
-  </div>
 
   <details class="setup-guide">
     <summary>How to get an API key</summary>
