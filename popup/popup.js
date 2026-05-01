@@ -53,9 +53,9 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  function applySession(s) {
-    state.sessionSv = RwgpsUsage.readNetwork(s);
-    state.sessionSvCached = (s && s.streetviewCached) || 0;
+  function applyTabSession(s) {
+    state.sessionSv = (s && s.network) || 0;
+    state.sessionSvCached = (s && s.cached) || 0;
     state.sessionGeo = (s && s.geocode) || 0;
   }
 
@@ -86,10 +86,20 @@ document.addEventListener('DOMContentLoaded', function () {
     render();
   });
 
-  chrome.storage.local.get(['apiUsage', 'sessionApiUsage'], function (result) {
+  chrome.storage.local.get(['apiUsage'], function (result) {
     applyMonthly(result.apiUsage);
-    applySession(result.sessionApiUsage);
     render();
+  });
+
+  // Look up the active tab's session counter (per page-load, per tab).
+  var activeTabId = null;
+  chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+    activeTabId = (tabs[0] && tabs[0].id) || null;
+    chrome.storage.session.get(['sessionByTab'], function (result) {
+      var byTab = result.sessionByTab || {};
+      applyTabSession(activeTabId != null ? byTab[activeTabId] : null);
+      render();
+    });
   });
 
   var toggleBtn = document.getElementById('toggleKey');
@@ -154,15 +164,14 @@ document.addEventListener('DOMContentLoaded', function () {
         changed = true;
       }
     }
-    if (area === 'local') {
-      if (changes.apiUsage) {
-        applyMonthly(changes.apiUsage.newValue);
-        changed = true;
-      }
-      if (changes.sessionApiUsage) {
-        applySession(changes.sessionApiUsage.newValue);
-        changed = true;
-      }
+    if (area === 'local' && changes.apiUsage) {
+      applyMonthly(changes.apiUsage.newValue);
+      changed = true;
+    }
+    if (area === 'session' && changes.sessionByTab && activeTabId != null) {
+      var byTab = changes.sessionByTab.newValue || {};
+      applyTabSession(byTab[activeTabId]);
+      changed = true;
     }
     if (changed) render();
   });

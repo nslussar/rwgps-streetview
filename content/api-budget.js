@@ -16,12 +16,25 @@
 
   var DEFAULT_CAP = 10000;
   var GEOCODE_MSG = 'RWGPS_SV_GEOCODE';
+  var PAGE_LOAD_MSG = 'RWGPS_SV_PAGE_LOAD';
 
   var cap = DEFAULT_CAP;
   var capEnabled = true;
   var streetviewNetwork = 0;
 
+  // Tolerate stale content scripts (after extension reload) — chrome.runtime
+  // throws "Extension context invalidated" until the page is refreshed.
+  function send(type) {
+    try {
+      chrome.runtime.sendMessage({ type: type }, function () {
+        if (chrome.runtime.lastError) { /* swallow */ }
+      });
+    } catch (_) { /* swallow */ }
+  }
+
   function init() {
+    send(PAGE_LOAD_MSG);
+
     chrome.storage.sync.get(['apiCap', 'apiCapEnabled'], function (s) {
       cap = (typeof s.apiCap === 'number' && s.apiCap >= 0) ? s.apiCap : DEFAULT_CAP;
       capEnabled = s.apiCapEnabled !== false;
@@ -52,13 +65,7 @@
   }
 
   function countGeocode() {
-    // Stale content scripts (after extension reload) throw "Extension context
-    // invalidated" — swallow it; the user just needs to refresh the page.
-    try {
-      chrome.runtime.sendMessage({ type: GEOCODE_MSG }, function () {
-        if (chrome.runtime.lastError) { /* swallow */ }
-      });
-    } catch (_) { /* swallow */ }
+    send(GEOCODE_MSG);
   }
 
   window.RwgpsApiBudget = {
