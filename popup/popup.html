@@ -32,12 +32,14 @@
     <div class="usage-line">
       <span id="usageMonth">—</span>:
       <span id="usageSv">0</span> / <span id="usageCapDisplay">10,000</span> Street View,
+      <span id="usageSvCached">0</span> cached,
       <span id="usageGeo">0</span> geocoding
       <button type="button" id="resetUsage" class="link-btn" title="Reset monthly counters">reset</button>
     </div>
     <div class="usage-line muted">
       This session:
       <span id="sessionSv">0</span> Street View,
+      <span id="sessionSvCached">0</span> cached,
       <span id="sessionGeo">0</span> geocoding
     </div>
   </div>
@@ -65,6 +67,7 @@
     <p class="note">The Street View Static API includes 10,000 free requests per month.</p>
   </details>
 
+  <script src="../lib/usage.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

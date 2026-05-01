@@ -11,32 +11,27 @@ document.addEventListener('DOMContentLoaded', function () {
   const usageField = document.querySelector('.usage-field');
   const usageMonthEl = document.getElementById('usageMonth');
   const usageSvEl = document.getElementById('usageSv');
+  const usageSvCachedEl = document.getElementById('usageSvCached');
   const usageGeoEl = document.getElementById('usageGeo');
   const usageCapDisplayEl = document.getElementById('usageCapDisplay');
   const sessionSvEl = document.getElementById('sessionSv');
+  const sessionSvCachedEl = document.getElementById('sessionSvCached');
   const sessionGeoEl = document.getElementById('sessionGeo');
 
-  // Display version
   var manifest = chrome.runtime.getManifest();
   var version = manifest.version === '0.0.0' ? '(dev build)' : 'v' + manifest.version;
   document.getElementById('version').textContent = version;
 
-  // ---- Usage state + rendering ----
-
   var state = {
     monthSv: 0,
+    monthSvCached: 0,
     monthGeo: 0,
     sessionSv: 0,
+    sessionSvCached: 0,
     sessionGeo: 0,
     cap: DEFAULT_CAP,
     capEnabled: true
   };
-
-  function currentMonthKey() {
-    var d = new Date();
-    var m = d.getMonth() + 1;
-    return d.getFullYear() + '-' + (m < 10 ? '0' + m : '' + m);
-  }
 
   function currentMonthLabel() {
     return new Date().toLocaleString(undefined, { month: 'long', year: 'numeric' });
@@ -46,12 +41,32 @@ document.addEventListener('DOMContentLoaded', function () {
     return Number(n || 0).toLocaleString();
   }
 
+  function applyMonthly(u) {
+    if (u && u.month === RwgpsUsage.currentMonth()) {
+      state.monthSv = RwgpsUsage.readNetwork(u);
+      state.monthSvCached = u.streetviewCached || 0;
+      state.monthGeo = u.geocode || 0;
+    } else {
+      state.monthSv = 0;
+      state.monthSvCached = 0;
+      state.monthGeo = 0;
+    }
+  }
+
+  function applySession(s) {
+    state.sessionSv = RwgpsUsage.readNetwork(s);
+    state.sessionSvCached = (s && s.streetviewCached) || 0;
+    state.sessionGeo = (s && s.geocode) || 0;
+  }
+
   function render() {
     usageMonthEl.textContent = currentMonthLabel();
     usageSvEl.textContent = fmt(state.monthSv);
+    usageSvCachedEl.textContent = fmt(state.monthSvCached);
     usageGeoEl.textContent = fmt(state.monthGeo);
     usageCapDisplayEl.textContent = fmt(state.cap);
     sessionSvEl.textContent = fmt(state.sessionSv);
+    sessionSvCachedEl.textContent = fmt(state.sessionSvCached);
     sessionGeoEl.textContent = fmt(state.sessionGeo);
     if (state.capEnabled && state.monthSv >= state.cap) {
       usageField.classList.add('over-cap');
@@ -60,7 +75,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  // Load saved settings
   chrome.storage.sync.get(['apiKey', 'enabled', 'radius', 'apiCap', 'apiCapEnabled'], function (result) {
     apiKeyInput.value = result.apiKey || '';
     enabledInput.checked = result.enabled !== false;
@@ -73,23 +87,11 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   chrome.storage.local.get(['apiUsage', 'sessionApiUsage'], function (result) {
-    var u = result.apiUsage;
-    var monthKey = currentMonthKey();
-    if (u && u.month === monthKey) {
-      state.monthSv = u.streetview || 0;
-      state.monthGeo = u.geocode || 0;
-    } else {
-      // Stored bucket is from a previous month — display zeros (next tryIncrement will reset on disk)
-      state.monthSv = 0;
-      state.monthGeo = 0;
-    }
-    var s = result.sessionApiUsage;
-    state.sessionSv = (s && s.streetview) || 0;
-    state.sessionGeo = (s && s.geocode) || 0;
+    applyMonthly(result.apiUsage);
+    applySession(result.sessionApiUsage);
     render();
   });
 
-  // Toggle API key visibility
   var toggleBtn = document.getElementById('toggleKey');
   var eyeIcon = document.getElementById('eyeIcon');
   toggleBtn.addEventListener('click', function () {
@@ -98,7 +100,6 @@ document.addEventListener('DOMContentLoaded', function () {
     eyeIcon.src = hidden ? '../icons/eye-show.png' : '../icons/eye-hide.png';
   });
 
-  // Auto-save on change
   var saveTimer = null;
   apiKeyInput.addEventListener('input', function () {
     clearTimeout(saveTimer);
@@ -133,12 +134,12 @@ document.addEventListener('DOMContentLoaded', function () {
     chrome.storage.sync.set({ apiCapEnabled: apiCapEnabledInput.checked });
   });
 
+  // Route reset through the SW so it can cancel pending flushes and drop
+  // in-flight deltas atomically — popup writing apiUsage directly would race.
   resetBtn.addEventListener('click', function () {
-    var fresh = { month: currentMonthKey(), streetview: 0, geocode: 0 };
-    chrome.storage.local.set({ apiUsage: fresh });
+    chrome.runtime.sendMessage({ type: RwgpsUsage.RESET_MSG });
   });
 
-  // Live updates from other tabs / content scripts
   chrome.storage.onChanged.addListener(function (changes, area) {
     var changed = false;
     if (area === 'sync') {
@@ -155,20 +156,11 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     if (area === 'local') {
       if (changes.apiUsage) {
-        var u = changes.apiUsage.newValue;
-        if (u && u.month === currentMonthKey()) {
-          state.monthSv = u.streetview || 0;
-          state.monthGeo = u.geocode || 0;
-        } else {
-          state.monthSv = 0;
-          state.monthGeo = 0;
-        }
+        applyMonthly(changes.apiUsage.newValue);
         changed = true;
       }
       if (changes.sessionApiUsage) {
-        var s = changes.sessionApiUsage.newValue;
-        state.sessionSv = (s && s.streetview) || 0;
-        state.sessionGeo = (s && s.geocode) || 0;
+        applySession(changes.sessionApiUsage.newValue);
         changed = true;
       }
     }
