@@ -17,28 +17,33 @@
     </div>
   </div>
 
-  <div class="field">
-    <label for="radius">Search radius (meters)</label>
-    <input type="number" id="radius" min="1" max="100" value="10">
-  </div>
+  <details class="advanced">
+    <summary>Advanced</summary>
 
-  <div class="field">
-    <label for="bucketMeters">Bucket size (meters)</label>
-    <input type="number" id="bucketMeters" min="0" max="100" value="10">
-    <span class="note">0 = off</span>
-  </div>
+    <div class="field">
+      <label for="radius">Pano search radius (m)</label>
+      <input type="number" id="radius" min="1" max="100" value="10">
+      <p class="field-help">How far Google searches for a Street View panorama around the point.</p>
+    </div>
 
-  <div class="field">
-    <label for="skipThresholdMeters">Skip threshold (meters)</label>
-    <input type="number" id="skipThresholdMeters" min="0" max="200" value="10">
-    <span class="note">0 = always update</span>
-  </div>
+    <div class="field">
+      <label for="bucketMeters">Position rounding (m)</label>
+      <input type="number" id="bucketMeters" min="0" max="100" value="10">
+      <p class="field-help">Snap nearby positions together so the browser reuses cached images. Set 0 to disable.</p>
+    </div>
 
-  <div class="field">
-    <label for="dwellMs">Dwell delay (ms)</label>
-    <input type="number" id="dwellMs" min="0" max="1000" step="50" value="200">
-    <span class="note">0 = immediate</span>
-  </div>
+    <div class="field">
+      <label for="skipThresholdMeters">Min cursor move to refresh (m)</label>
+      <input type="number" id="skipThresholdMeters" min="0" max="200" value="10">
+      <p class="field-help">Don't fetch a new image until the cursor moves at least this far. Set 0 to refresh on every move.</p>
+    </div>
+
+    <div class="field">
+      <label for="dwellMs">Hover settle delay (ms)</label>
+      <input type="number" id="dwellMs" min="0" max="1000" step="50" value="200">
+      <p class="field-help">Wait for the cursor to stop before fetching, so quick sweeps don't fire requests. Set 0 to fetch immediately.</p>
+    </div>
+  </details>
 
   <div class="field toggle-field">
     <label for="enabled">Enabled</label>

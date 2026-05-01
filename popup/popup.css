@@ -88,9 +88,15 @@ h1 {
   display: block;
 }
 
-#radius,
-#apiCap {
-  width: 100px;
+.field input[type="number"] {
+  width: 90px;
+  -moz-appearance: textfield;
+}
+
+.field input[type="number"]::-webkit-outer-spin-button,
+.field input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .usage-field .usage-line {
@@ -143,6 +149,35 @@ h1 {
   color: #333;
   text-transform: none;
   letter-spacing: 0;
+}
+
+.advanced {
+  margin: 4px 0 12px;
+  border-top: 1px solid #eee;
+  padding-top: 10px;
+}
+
+.advanced > summary {
+  cursor: pointer;
+  color: #4285f4;
+  font-size: 12px;
+  user-select: none;
+  margin-bottom: 10px;
+}
+
+.advanced > summary:hover {
+  color: #3367d6;
+}
+
+.advanced[open] > summary {
+  margin-bottom: 12px;
+}
+
+.field-help {
+  font-size: 11px;
+  color: #888;
+  line-height: 1.4;
+  margin: 4px 0 0;
 }
 
 .setup-guide {
