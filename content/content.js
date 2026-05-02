@@ -713,7 +713,6 @@
     var gap = 20;
 
     var vw = window.innerWidth;
-    var vh = window.innerHeight;
 
     var anchorX = cursorX;
     var anchorY = cursorY;
