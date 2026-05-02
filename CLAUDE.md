@@ -37,7 +37,7 @@ Supporting files:
 - `lib/usage.js` — Shared helpers/constants for the request-counter feature; loaded by SW (importScripts), popup, and content scripts
 - `content/api-budget.js` — Cap-check helper in ISOLATED world; sends geocode + page-load messages to SW (does NOT write counters)
 - `icons/heading-arrow.svg` — Arrow icon used in the heading compass indicator
-- `popup/` — Settings UI for API key entry (auto-saves, no build step)
+- `popup/` — State-driven settings UI (firstrun / invalidkey / overquota / active). Renders monthly usage meter, cache + geo stat rows, advanced tuning knobs, and the API-key field. State decision lives in `popup.js:decideState`. Design source of truth: `design/handoff/SPEC.md` + `popup-reference.html`.
 - `content/overlay.css` — Overlay styles (`pointer-events: none` is critical)
 
 ## Key technical details
@@ -53,6 +53,7 @@ Supporting files:
 - **Billing nuances**: NOT_FOUND / ZERO_RESULTS / DATA_NOT_AVAILABLE responses from Street View Static ARE billable (per Google's reporting docs). `&return_error_code=true` only changes response format, not billing. Browser HTTP cache hits do NOT bill (no request reaches Google) — detected via `chrome.webRequest`'s `details.fromCache`. **`webRequest.onCompleted` does fire with `fromCache:true` for `<img>` cache hits when URLs match exactly** — don't assume otherwise; if the cache counter looks broken, suspect URL instability (e.g. bucketing producing different outputs for nearby points) before suspecting the webRequest API.
 - **Bucketing gotcha** (`lib/geo.js:bucketLatLng`): snap lat FIRST, then derive `cosLat` from the snapped lat. Computing `cosLat` from the raw input lat causes points in the same lat-cell to use slightly different `lngStep` values, which can flip lng across a bucket boundary and produce distinct URLs (cache misses) for points well inside one logical bucket.
 - **`chrome.webRequest` permissions gotcha**: webRequest events fire only when the extension has `host_permissions` for BOTH the destination URL AND the initiator page. Manifest declares both `https://maps.googleapis.com/*` and `https://ridewithgps.com/*` for this reason — `content_scripts.matches` is NOT a substitute despite chrome://extensions UI conflating them under "Site access".
+- **Popup error signals** (written by `background.js`, read by `popup.js`): `apiKeyInvalid` (sticky bool in `chrome.storage.local`, set on 403 REQUEST_DENIED, cleared on next 2xx) drives the invalid-key state. `rateLimitedAt` (timestamp, throttled to one write per 5s) drives the transient rate-limit notice (popup hides after 60s). Both rely on `&return_error_code=true` so Google returns 403/429 directly instead of an opaque "generic error" PNG.
 
 ## Build and release
 
@@ -78,3 +79,4 @@ Supporting files:
 
   When debugging cross-context behavior (counter discrepancies, message passing, cache accounting), add `console.log` on BOTH sides and watch BOTH consoles — the asymmetry between what each side sees is usually where the bug lives.
 - Don't theorize about Chrome internals; verify with a log. (The "`<img>` memory cache short-circuits webRequest" theory was wrong — bucketing was producing unstable URLs and webRequest was working fine.)
+- For popup UI changes, `design/handoff/SPEC.md` is the layout/copy source of truth and `design/handoff/popup-reference.html` is a runnable mockup of all 4 states. Where SPEC and behavior conflict, the extension wins — flag it.
