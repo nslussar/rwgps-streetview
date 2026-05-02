@@ -76,6 +76,8 @@
   let markerScreenY = null;
   let cachedMapRect = null; // cached getBoundingClientRect for mapContainer
   let lingerTimer = null; // delays overlay hide so user can click it
+  let positionScheduled = false;
+  let positionRafId = null;
 
   // --- Initialization ---
 
@@ -696,6 +698,20 @@
       noCoverageEl.style.display = 'flex';
     };
     preload.src = url;
+  }
+
+  // Coalesce mousemove-driven repositions to one paint per frame.
+  // The data path (image, heading, geocode) stays on its 150ms throttle;
+  // only the overlay window position runs at native frame rate.
+  function schedulePositionOverlay() {
+    if (positionScheduled) return;
+    if (!overlayEl || overlayEl.style.display === 'none') return;
+    positionScheduled = true;
+    positionRafId = requestAnimationFrame(function () {
+      positionScheduled = false;
+      positionRafId = null;
+      positionOverlay();
+    });
   }
 
   function positionOverlay() {
