@@ -43,22 +43,10 @@
   let pendingTrackingLatlng = null;
   let trackingSendTimer = null;
 
-  function markerContainerPixel(lat, lng) {
-    if (!overlayProjection) return null;
-    try {
-      var latlng = new google.maps.LatLng(lat, lng);
-      var px = overlayProjection.fromLatLngToContainerPixel(latlng);
-      if (px) return { x: px.x, y: px.y };
-    } catch (e) { /* ignore */ }
-    return null;
-  }
-
   function throttledTrackingUpdate(latlng) {
     var lat = typeof latlng.lat === 'function' ? latlng.lat() : latlng.lat;
     var lng = typeof latlng.lng === 'function' ? latlng.lng() : latlng.lng;
     var data = { lat: lat, lng: lng };
-    var px = markerContainerPixel(lat, lng);
-    if (px) data.containerPixel = px;
 
     var now = Date.now();
     if (now - lastTrackingSend >= TRACKING_UPDATE_INTERVAL) {
