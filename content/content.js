@@ -25,12 +25,13 @@
   const DEFAULT_DWELL_MS = 200;
   const HEADING_BUCKET_DEG = 15;
   const METERS_PER_DEGREE = 111000;          // approx meters per degree of latitude
-  // Pixel floors compose with the user's meters settings: the effective
-  // threshold is max(userMeters, pixelFloor * metersPerPixelAtZoom). At high
-  // zoom the meters value dominates; at low zoom the pixel floor takes over
-  // so cursor sweeps don't hammer the API with sub-pixel updates.
-  const PIXEL_FLOOR_BUCKET = 0; // disabled: large buckets at low zoom risk snapping to wrong street / off-coverage spot
-  const PIXEL_FLOOR_SKIP = 5;   // tolerate a few px of cursor jitter
+  // The skip threshold composes with the user's meters setting: the effective
+  // value is max(userMeters, PIXEL_FLOOR_SKIP * metersPerPixelAtZoom). At high
+  // zoom the user value dominates; at low zoom the pixel floor takes over so
+  // cursor sweeps don't hammer the API with sub-pixel updates. Bucketing is
+  // intentionally not auto-scaled — large buckets at low zoom would snap
+  // requests onto neighboring streets / off-coverage spots.
+  const PIXEL_FLOOR_SKIP = 5;
   let apiKey = '';
   let enabled = true;
   let radius = DEFAULT_RADIUS;
@@ -140,12 +141,13 @@
     return (typeof v === 'number' && v >= 0) ? v : fallback;
   }
 
-  // Lift a meters threshold to whichever is bigger: the user-set floor or N
-  // screen pixels at the current zoom. Defaults to the user value when zoom
-  // is unknown to preserve the historical (high-zoom) behavior.
-  function effectiveMeters(userMeters, pixelFloor, lat) {
-    if (pixelFloor === 0 || lastKnownZoom == null) return userMeters;
-    var pixelMeters = pixelFloor * RwgpsGeo.metersPerPixelAtZoom(lat, lastKnownZoom);
+  // Skip-threshold floor lifted to whichever is bigger: the user-set value
+  // or PIXEL_FLOOR_SKIP screen pixels at the current zoom. Falls back to
+  // the user value when zoom is unknown (preserves historical high-zoom
+  // behavior at startup before the bridge has reported zoom).
+  function effectiveSkipMeters(userMeters, lat) {
+    if (lastKnownZoom == null) return userMeters;
+    var pixelMeters = PIXEL_FLOOR_SKIP * RwgpsGeo.metersPerPixelAtZoom(lat, lastKnownZoom);
     return userMeters > pixelMeters ? userMeters : pixelMeters;
   }
 
@@ -466,7 +468,7 @@
       markerScreenY = rect.top + data.containerPixel.y;
     }
 
-    if (lastShownPoint && RwgpsGeo.distanceMeters(lastShownPoint, data) < effectiveMeters(skipThresholdMeters, PIXEL_FLOOR_SKIP, data.lat)) {
+    if (lastShownPoint && RwgpsGeo.distanceMeters(lastShownPoint, data) < effectiveSkipMeters(skipThresholdMeters, data.lat)) {
       positionOverlay();
       showOverlay();
       return;
@@ -517,7 +519,7 @@
       lastActiveMode = 'manual';
     }
 
-    if (lastShownPoint && RwgpsGeo.distanceMeters(lastShownPoint, nearest) < effectiveMeters(skipThresholdMeters, PIXEL_FLOOR_SKIP, nearest.lat)) {
+    if (lastShownPoint && RwgpsGeo.distanceMeters(lastShownPoint, nearest) < effectiveSkipMeters(skipThresholdMeters, nearest.lat)) {
       positionOverlay();
       return;
     }
@@ -645,7 +647,7 @@
       return;
     }
 
-    var b = RwgpsGeo.bucketLatLng(lat, lng, effectiveMeters(bucketMeters, PIXEL_FLOOR_BUCKET, lat));
+    var b = RwgpsGeo.bucketLatLng(lat, lng, bucketMeters);
     var h = RwgpsGeo.bucketHeading(heading, HEADING_BUCKET_DEG);
 
     requestGeocode(b.lat, b.lng);
