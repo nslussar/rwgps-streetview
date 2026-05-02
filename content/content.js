@@ -355,7 +355,9 @@
     window.addEventListener('resize', invalidateMapRect);
     window.addEventListener('scroll', invalidateMapRect, true);
 
-    mapContainer.addEventListener('mousemove', onMouseMove);
+    // Bind mousemove to `document` so cursor tracking survives RWGPS rebuilding
+    // the map container on map-type switches (Google → other → Google).
+    document.addEventListener('mousemove', onMouseMove);
     mapContainer.addEventListener('mouseleave', function (event) {
       // Don't hide if cursor moved to the overlay
       if (overlayEl.contains(event.relatedTarget)) return;
@@ -379,11 +381,6 @@
     });
 
     overlayEl.addEventListener('mouseenter', cancelLingerTimer);
-
-    // Forward mousemove from overlay to keep tracking alive
-    overlayEl.addEventListener('mousemove', function (event) {
-      onMouseMove(event);
-    });
 
     // Hide when cursor leaves the overlay (unless going back to the map)
     overlayEl.addEventListener('mouseleave', function (event) {
