@@ -16,6 +16,7 @@
   let hooksInstalled = false;
   let trackingMarker = null;
   let markerMoveCounts = new Map(); // marker -> {count, lastTime}
+  let currentZoom = null;
 
   function debounce(fn, ms) {
     let timer;
@@ -66,7 +67,8 @@
       window.postMessage({
         type: PREFIX + 'EVENT',
         action: 'TRACKING_POSITION',
-        data: data
+        data: data,
+        zoom: currentZoom
       }, '*');
     } else {
       // Queue the latest position so we always send the final one
@@ -79,7 +81,8 @@
             window.postMessage({
               type: PREFIX + 'EVENT',
               action: 'TRACKING_POSITION',
-              data: pendingTrackingLatlng
+              data: pendingTrackingLatlng,
+              zoom: currentZoom
             }, '*');
             pendingTrackingLatlng = null;
           }
@@ -303,7 +306,13 @@
   function onMapFound(mapInstance) {
     if (map === mapInstance) return;
     map = mapInstance;
-    log('Map ready, zoom=' + map.getZoom());
+    currentZoom = map.getZoom();
+    log('Map ready, zoom=' + currentZoom);
+    try {
+      map.addListener('zoom_changed', function () {
+        currentZoom = map.getZoom();
+      });
+    } catch (e) { /* listener attach failed; bridge still works with stale zoom */ }
     setupProjectionHelper();
 
     // Scan for existing polylines after a short delay
@@ -523,7 +532,7 @@
             type: PREFIX + 'RESPONSE',
             action: 'LATLNG',
             data: result,
-            zoom: map ? map.getZoom() : 15,
+            zoom: currentZoom != null ? currentZoom : (map ? map.getZoom() : 15),
             requestId: msg.requestId
           }, '*');
         }

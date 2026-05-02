@@ -121,6 +121,36 @@ test('bearingToCompass: spot checks', () => {
   assert.equal(RwgpsGeo.bearingToCompass(360), 'N');
 });
 
+test('metersPerPixelAtZoom: equator zoom 0 ≈ 156543 m/px', () => {
+  const v = RwgpsGeo.metersPerPixelAtZoom(0, 0);
+  assert.ok(Math.abs(v - 156543) < 1, 'expected ~156543, got ' + v);
+});
+
+test('metersPerPixelAtZoom: halves with each zoom level', () => {
+  // At equator, each zoom step doubles resolution -> halves m/px.
+  for (let z = 0; z < 20; z++) {
+    const a = RwgpsGeo.metersPerPixelAtZoom(0, z);
+    const b = RwgpsGeo.metersPerPixelAtZoom(0, z + 1);
+    assert.ok(Math.abs(a / b - 2) < 1e-9, 'z=' + z + ' ratio ' + (a / b));
+  }
+});
+
+test('metersPerPixelAtZoom: scales by cos(lat)', () => {
+  // At 60° lat, cos(60°) = 0.5, so m/px should be half of the equator value
+  // at the same zoom.
+  const eq = RwgpsGeo.metersPerPixelAtZoom(0, 13);
+  const hi = RwgpsGeo.metersPerPixelAtZoom(60, 13);
+  assert.ok(Math.abs(hi / eq - 0.5) < 1e-9, 'expected ~0.5, got ' + (hi / eq));
+});
+
+test('metersPerPixelAtZoom: characteristic values at typical zooms', () => {
+  // Sanity-check magnitudes at the equator.
+  // z=18 (street level): ~0.6 m/px. z=13: ~19 m/px. z=10: ~153 m/px.
+  assert.ok(Math.abs(RwgpsGeo.metersPerPixelAtZoom(0, 18) - 0.597) < 0.01);
+  assert.ok(Math.abs(RwgpsGeo.metersPerPixelAtZoom(0, 13) - 19.11) < 0.05);
+  assert.ok(Math.abs(RwgpsGeo.metersPerPixelAtZoom(0, 10) - 152.88) < 0.5);
+});
+
 test('nearestPointOnPolyline: empty / single-point input returns null', () => {
   assert.equal(RwgpsGeo.nearestPointOnPolyline({ lat: 0, lng: 0 }, []), null);
   assert.equal(RwgpsGeo.nearestPointOnPolyline({ lat: 0, lng: 0 }, [{ lat: 0, lng: 0 }]), null);

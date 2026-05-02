@@ -24,8 +24,13 @@
   const DEFAULT_SKIP_THRESHOLD_METERS = 10;
   const DEFAULT_DWELL_MS = 200;
   const HEADING_BUCKET_DEG = 15;
-  const MERCATOR_METERS_PER_PX_Z0 = 156543; // meters/pixel at zoom 0, equator (Earth circumference / 256)
   const METERS_PER_DEGREE = 111000;          // approx meters per degree of latitude
+  // Pixel floors compose with the user's meters settings: the effective
+  // threshold is max(userMeters, pixelFloor * metersPerPixelAtZoom). At high
+  // zoom the meters value dominates; at low zoom the pixel floor takes over
+  // so cursor sweeps don't hammer the API with sub-pixel updates.
+  const PIXEL_FLOOR_BUCKET = 0; // disabled: large buckets at low zoom risk snapping to wrong street / off-coverage spot
+  const PIXEL_FLOOR_SKIP = 5;   // tolerate a few px of cursor jitter
   let apiKey = '';
   let enabled = true;
   let radius = DEFAULT_RADIUS;
@@ -135,6 +140,19 @@
     return (typeof v === 'number' && v >= 0) ? v : fallback;
   }
 
+  // Lift a meters threshold to whichever is bigger: the user-set floor or N
+  // screen pixels at the current zoom. Defaults to the user value when zoom
+  // is unknown to preserve the historical (high-zoom) behavior.
+  function effectiveMeters(userMeters, pixelFloor, lat) {
+    if (pixelFloor === 0 || lastKnownZoom == null) return userMeters;
+    var pixelMeters = pixelFloor * RwgpsGeo.metersPerPixelAtZoom(lat, lastKnownZoom);
+    return userMeters > pixelMeters ? userMeters : pixelMeters;
+  }
+
+  function redactKey(url) {
+    return url.replace(/([?&]key=)[^&]+/, '$1REDACTED');
+  }
+
   function validateApiKey() {
     if (!apiKey) return;
     // Test with a known-good Street View location (Times Square)
@@ -143,7 +161,7 @@
       + '&radius=1000'
       + '&key=' + encodeURIComponent(apiKey)
       + '&return_error_code=true';
-    console.log('[RWGPS Street View] Validating API key, test URL: ' + testUrl);
+    console.log('[RWGPS Street View] Validating API key, test URL: ' + redactKey(testUrl));
     var testImg = new Image();
     testImg.onload = function () {
       keyValid = true;
@@ -153,7 +171,7 @@
     testImg.onerror = function () {
       keyValid = false;
       chrome.storage.local.set({ apiKeyInvalid: true });
-      console.log('[RWGPS Street View] API key validation failed (test image error). Try opening this URL in a browser tab to see the error: ' + testUrl);
+      console.log('[RWGPS Street View] API key validation failed (test image error). Try opening this URL in a browser tab to see the error: ' + redactKey(testUrl));
     };
     if (!RwgpsApiBudget.tryStreetView()) {
       console.log('[RWGPS Street View] API key validation skipped — monthly cap reached.');
@@ -247,6 +265,7 @@
             setRouteCoords(msg.data);
             break;
           case 'TRACKING_POSITION':
+            if (msg.zoom != null) lastKnownZoom = msg.zoom;
             handleTrackingPosition(msg.data);
             break;
           case 'TRACKING_LOST':
@@ -447,7 +466,7 @@
       markerScreenY = rect.top + data.containerPixel.y;
     }
 
-    if (lastShownPoint && RwgpsGeo.distanceMeters(lastShownPoint, data) < skipThresholdMeters) {
+    if (lastShownPoint && RwgpsGeo.distanceMeters(lastShownPoint, data) < effectiveMeters(skipThresholdMeters, PIXEL_FLOOR_SKIP, data.lat)) {
       positionOverlay();
       showOverlay();
       return;
@@ -483,7 +502,7 @@
       return;
     }
 
-    var metersPerPixel = MERCATOR_METERS_PER_PX_Z0 * Math.cos(latlng.lat * Math.PI / 180) / Math.pow(2, z);
+    var metersPerPixel = RwgpsGeo.metersPerPixelAtZoom(latlng.lat, z);
     var thresholdMeters = 10 * metersPerPixel;
     var distMeters = nearest.distanceDeg * METERS_PER_DEGREE * Math.cos(latlng.lat * Math.PI / 180);
 
@@ -498,7 +517,7 @@
       lastActiveMode = 'manual';
     }
 
-    if (lastShownPoint && RwgpsGeo.distanceMeters(lastShownPoint, nearest) < skipThresholdMeters) {
+    if (lastShownPoint && RwgpsGeo.distanceMeters(lastShownPoint, nearest) < effectiveMeters(skipThresholdMeters, PIXEL_FLOOR_SKIP, nearest.lat)) {
       positionOverlay();
       return;
     }
@@ -626,7 +645,7 @@
       return;
     }
 
-    var b = RwgpsGeo.bucketLatLng(lat, lng, bucketMeters);
+    var b = RwgpsGeo.bucketLatLng(lat, lng, effectiveMeters(bucketMeters, PIXEL_FLOOR_BUCKET, lat));
     var h = RwgpsGeo.bucketHeading(heading, HEADING_BUCKET_DEG);
 
     requestGeocode(b.lat, b.lng);

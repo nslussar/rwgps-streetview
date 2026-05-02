@@ -27,6 +27,7 @@ Three execution contexts:
     `bucketMeters` (10) snaps lat/lng/heading before building the URL so re-hovers hit the browser HTTP cache;
     `skipThresholdMeters` (10) suppresses updates within N meters of the last shown point (no request, no cache lookup);
     `dwellMs` (200) defers the SV image fetch until the cursor settles (overlay show/position/heading still update immediately).
+  - **Zoom-aware auto-scale**: `skipThresholdMeters` is a floor, not an absolute. The effective skip distance is `max(userMeters, PIXEL_FLOOR_SKIP * RwgpsGeo.metersPerPixelAtZoom(lat, zoom))` (`PIXEL_FLOOR_SKIP=5`): at high zoom the user value wins; at low zoom the pixel floor takes over so cursor sweeps don't burn API calls on sub-pixel movements. `bucketMeters` is **not** auto-scaled (`PIXEL_FLOOR_BUCKET=0`) — large buckets at low zoom would snap requests onto neighboring streets / off-coverage spots. Zoom is forwarded from the bridge on every `TRACKING_POSITION` event and on `LATLNG` responses (both modes keep `lastKnownZoom` fresh).
 - **Service worker** (`background.js`) — Sole writer for all API counter state.
   - `chrome.webRequest.onCompleted` observes Street View Static requests; `details.fromCache` splits network (billed) vs cached.
   - Receives `GEOCODE_MSG`/`PAGE_LOAD_MSG`/`RESET_MSG` from content + popup. Coalesces writes to a 1s flush.
