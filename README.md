@@ -23,13 +23,9 @@ Or install from source:
 
 ## API Key Setup
 
-You need a Google Maps API key with the **Street View Static API** enabled:
+The extension requires a user-supplied Google Maps API key with the **Street View Static API** enabled. The key is called directly from the browser, so a leak is billable against the project; restricting the key in GCP is strongly recommended.
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com/apis)
-2. Create a project (or select an existing one)
-3. Enable the **Street View Static API**
-4. Go to **Credentials** > **Create Credentials** > **API Key**
-5. Recommended: restrict the key to **Street View Static API** only
+See [docs/api_key_setup/](docs/api_key_setup/README.md) for the full walkthrough — getting a key, applying API + referrer restrictions, configuring the daily quota cap, and reconciling usage across the three GCP reporting surfaces.
 
 The Street View Static API includes 10,000 free requests per month. See [Google Maps Platform pricing](https://developers.google.com/maps/billing-and-pricing/pricing#streetview-pricing) for current rates above the free tier.
 

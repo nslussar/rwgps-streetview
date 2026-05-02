@@ -42,7 +42,7 @@
         </svg>
         How to get an API key
       </span>
-      <span class="disclosure-meta">3 min</span>
+      <span class="disclosure-meta">5 min</span>
     </button>
     <ol id="howToList" class="howto" hidden>
       <li>Open <a href="https://console.cloud.google.com/apis" target="_blank" rel="noopener">Google Cloud Console<svg class="ext-icon" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
@@ -51,8 +51,10 @@
       <li>Create or select a project</li>
       <li>Enable <b>Street View Static API</b></li>
       <li>Credentials &rarr; Create credentials &rarr; API key</li>
-      <li>Restrict to Street View Static (recommended)</li>
       <li>Copy &amp; paste the key above</li>
+      <li>Recommended: <a href="https://github.com/nslussar/rwgps-streetview/blob/main/docs/api_key_setup/README.md#3-restrict-the-key" target="_blank" rel="noopener">restrict &amp; protect the key<svg class="ext-icon" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+        <path d="M3.5 2H2v6h6V6.5M5.5 2H8v2.5M8 2L4.5 5.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg></a></li>
     </ol>
   </section>
 
@@ -149,7 +151,7 @@
         <div class="adv-field">
           <div class="adv-label">Min cursor move <span class="adv-unit">(m)</span></div>
           <input id="skipThresholdMeters" type="number" min="0" max="200" value="10">
-          <div class="adv-hint">Distance threshold before refetching.</div>
+          <div class="adv-hint">Distance threshold before refetching. Auto-scales up when zoomed out.</div>
         </div>
         <div class="adv-field">
           <div class="adv-label">Settle delay <span class="adv-unit">(ms)</span></div>
