@@ -2,96 +2,189 @@
 <html>
 <head>
   <meta charset="utf-8">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <h1>Street View Preview <span id="version" class="version"></span></h1>
-
-  <div class="field">
-    <label for="apiKey">Google Maps API Key</label>
-    <div class="input-wrapper">
-      <input type="password" id="apiKey" placeholder="AIza..." spellcheck="false" autocomplete="off">
-      <button type="button" id="toggleKey" class="toggle-visibility" title="Show/hide API key">
-        <img id="eyeIcon" src="../icons/eye-hide.png" width="14" height="14" alt="Toggle visibility">
-      </button>
+  <header class="header">
+    <div class="brand">
+      <img src="../icons/icon128.png" width="24" height="24" alt="">
+      <span class="brand-name">Street View Preview</span>
     </div>
-  </div>
-
-  <div class="field toggle-field">
-    <label for="enabled">Enabled</label>
-    <input type="checkbox" id="enabled" checked>
-  </div>
-
-  <div class="field usage-field">
-    <div class="usage-header">
-      <span class="usage-title">Usage</span>
-      <span id="usageMonth" class="usage-month">—</span>
-      <button type="button" id="resetUsage" class="link-btn" title="Reset monthly counters">reset</button>
+    <div class="status">
+      <span class="status-dot" aria-hidden="true"></span>
+      <span class="version" id="version"></span>
     </div>
-    <dl class="usage-grid">
-      <dt>Street View</dt>
-      <dd><span id="usageSv">0</span> / <span id="usageCapDisplay">10,000</span></dd>
-      <dt>Cached</dt>
-      <dd><span id="usageSvCached">0</span></dd>
-      <dt>Geocoding</dt>
-      <dd><span id="usageGeo">0</span></dd>
-    </dl>
-    <div class="usage-session">
-      This page: <span id="sessionSv">0</span> SV ·
-      <span id="sessionSvCached">0</span> cached ·
-      <span id="sessionGeo">0</span> geo
+  </header>
+
+  <!-- FIRST RUN -->
+  <section class="body body-firstrun" hidden>
+    <div class="onboarding-card">
+      <div class="onboarding-headline">Paste your Google Maps API key</div>
+      <div class="onboarding-sub">The Street View Static API gives you<br>10,000 free requests every month.</div>
+      <div class="onboarding-row">
+        <div class="onboarding-input-wrap">
+          <input id="apiKeyOnboard" type="password" placeholder="AIza..."
+                 aria-label="Google Maps API key" autocomplete="off" spellcheck="false">
+          <button id="apiKeyOnboardEye" type="button" class="onboarding-eye" title="Show API key">
+            <img id="apiKeyOnboardEyeIcon" src="../icons/eye-hide.png" width="14" height="14" alt="Toggle visibility">
+          </button>
+        </div>
+        <button id="apiKeySaveBtn" type="button">Save</button>
+      </div>
     </div>
-  </div>
-
-  <div class="field cap-field">
-    <label class="cap-toggle">
-      <input type="checkbox" id="apiCapEnabled" checked>
-      <span>Enforce monthly cap of</span>
-    </label>
-    <input type="number" id="apiCap" min="0" step="100" value="10000">
-    <span class="cap-suffix">requests</span>
-  </div>
-
-  <details class="advanced">
-    <summary>Advanced</summary>
-
-    <div class="field">
-      <label for="radius">Pano search radius (m)</label>
-      <input type="number" id="radius" min="1" max="100" value="10">
-      <p class="field-help">How far Google searches for a Street View panorama around the point.</p>
-    </div>
-
-    <div class="field">
-      <label for="bucketMeters">Position rounding (m)</label>
-      <input type="number" id="bucketMeters" min="0" max="100" value="10">
-      <p class="field-help">Snap nearby positions together so the browser reuses cached images. Set 0 to disable.</p>
-    </div>
-
-    <div class="field">
-      <label for="skipThresholdMeters">Min cursor move to refresh (m)</label>
-      <input type="number" id="skipThresholdMeters" min="0" max="200" value="10">
-      <p class="field-help">Don't fetch a new image until the cursor moves at least this far. Set 0 to refresh on every move.</p>
-    </div>
-
-    <div class="field">
-      <label for="dwellMs">Hover settle delay (ms)</label>
-      <input type="number" id="dwellMs" min="0" max="1000" step="50" value="200">
-      <p class="field-help">Wait for the cursor to stop before fetching, so quick sweeps don't fire requests. Set 0 to fetch immediately.</p>
-    </div>
-  </details>
-
-  <details class="setup-guide">
-    <summary>How to get an API key</summary>
-    <ol>
-      <li>Go to <a href="https://console.cloud.google.com/apis" target="_blank">Google Cloud Console</a></li>
-      <li>Create a project (or select an existing one)</li>
-      <li>Enable the <strong>Street View Static API</strong></li>
-      <li>Go to <strong>Credentials</strong> &rarr; <strong>Create Credentials</strong> &rarr; <strong>API Key</strong></li>
-      <li>Optionally restrict the key to the Street View Static API</li>
-      <li>Paste the key above</li>
+    <button id="howToToggle" class="disclosure disclosure-link" type="button" aria-expanded="false">
+      <span class="disclosure-label">
+        <svg class="caret" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+          <path d="M3 1l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        How to get an API key
+      </span>
+      <span class="disclosure-meta">3 min</span>
+    </button>
+    <ol id="howToList" class="howto" hidden>
+      <li>Open <a href="https://console.cloud.google.com/apis" target="_blank" rel="noopener">Google Cloud Console<svg class="ext-icon" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+        <path d="M3.5 2H2v6h6V6.5M5.5 2H8v2.5M8 2L4.5 5.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg></a></li>
+      <li>Create or select a project</li>
+      <li>Enable <b>Street View Static API</b></li>
+      <li>Credentials &rarr; Create credentials &rarr; API key</li>
+      <li>Restrict to Street View Static (recommended)</li>
+      <li>Copy &amp; paste the key above</li>
     </ol>
-    <p class="note">The Street View Static API includes 10,000 free requests per month.</p>
-  </details>
+  </section>
+
+  <!-- ACTIVE / OVER QUOTA / INVALID KEY -->
+  <section class="body body-main" hidden>
+    <div id="invalidKeyBlock" class="invalid-block" hidden>
+      <div class="invalid-icon">!</div>
+      <div class="invalid-content">
+        <div class="invalid-title">API key rejected by Google</div>
+        <div class="invalid-body">Last response: <b>REQUEST_DENIED</b>. The key may be invalid, restricted to a different API, or the Street View Static API isn't enabled.</div>
+        <div class="invalid-actions">
+          <button id="replaceKeyBtn" type="button" class="btn btn-danger">Replace key</button>
+          <a id="troubleshootLink" class="btn btn-danger-outline" href="https://github.com/nslussar/rwgps-streetview#troubleshooting" target="_blank" rel="noopener">Troubleshoot</a>
+        </div>
+      </div>
+    </div>
+
+    <div id="dimmable" class="dimmable">
+
+      <div class="hero">
+        <div class="hero-eyebrow">
+          <span id="usageMonth">Usage</span>
+          <button id="resetUsage" type="button" class="link-btn" title="Reset monthly counters">Reset</button>
+        </div>
+        <div class="hero-number">
+          <span id="usageSv" class="hero-used">0</span><span class="hero-divider"> / </span><span id="usageCapDisplay" class="hero-max">10,000</span>
+        </div>
+        <div id="overCapLabel" class="over-cap-label" hidden>Monthly cap reached</div>
+
+        <div class="hero-bar"><div id="usageBarFill" class="hero-bar-fill"></div></div>
+        <div class="hero-scale">
+          <span>0</span>
+          <span id="usageScaleMax">10k</span>
+        </div>
+
+        <div class="stat-row stat-row-first">
+          <span class="stat-label">Served from cache</span>
+          <span class="stat-value" id="usageSvCached">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Geocoding (not counted against quota)</span>
+          <span class="stat-value" id="usageGeo">0</span>
+        </div>
+
+        <div id="overQuotaNotice" class="notice notice-danger" hidden>
+          <span class="notice-bullet" aria-hidden="true">&#9679;</span>
+          <span class="notice-text">Cap reached. Previews paused until <span id="nextResetDate">next month</span>, or raise the cap below.</span>
+        </div>
+
+        <div id="rateLimitNotice" class="notice notice-warn" hidden>
+          <span class="notice-bullet" aria-hidden="true">&#8635;</span>
+          <span class="notice-text">Google rate-limited the last request. Slowing down&hellip;</span>
+        </div>
+
+        <div id="activePagePill" class="page-pill" hidden>
+          <span class="page-pill-label">
+            <span class="status-dot status-dot-ok" aria-hidden="true"></span>
+            Active on this page
+          </span>
+          <span class="page-pill-counter">
+            <span id="sessionSv">0</span> requests &middot;
+            <span id="sessionSvCached">0</span> cached &middot;
+            <span id="sessionGeo">0</span> geo
+          </span>
+        </div>
+      </div>
+
+      <label class="cap-row">
+        <input type="checkbox" id="apiCapEnabled" checked>
+        <span class="cap-label">Enforce monthly cap of</span>
+        <input type="number" id="apiCap" min="0" step="100" value="10000">
+      </label>
+
+      <button id="advToggle" type="button" class="disclosure disclosure-section" aria-expanded="false" aria-controls="advanced">
+        <span class="disclosure-label">
+          <svg class="caret" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+            <path d="M3 1l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Advanced
+        </span>
+        <span class="disclosure-meta">4 settings</span>
+      </button>
+      <div id="advanced" class="advanced-grid" hidden>
+        <div class="adv-field">
+          <div class="adv-label">Pano radius <span class="adv-unit">(m)</span></div>
+          <input id="radius" type="number" min="1" max="100" value="10">
+          <div class="adv-hint">How far Google searches around the point.</div>
+        </div>
+        <div class="adv-field">
+          <div class="adv-label">Position rounding <span class="adv-unit">(m)</span></div>
+          <input id="bucketMeters" type="number" min="0" max="100" value="10">
+          <div class="adv-hint">Snap nearby positions to reuse cached images.</div>
+        </div>
+        <div class="adv-field">
+          <div class="adv-label">Min cursor move <span class="adv-unit">(m)</span></div>
+          <input id="skipThresholdMeters" type="number" min="0" max="200" value="10">
+          <div class="adv-hint">Distance threshold before refetching.</div>
+        </div>
+        <div class="adv-field">
+          <div class="adv-label">Settle delay <span class="adv-unit">(ms)</span></div>
+          <input id="dwellMs" type="number" min="0" max="1000" step="50" value="200">
+          <div class="adv-hint">Wait for cursor to stop before fetching.</div>
+        </div>
+      </div>
+
+      <div class="footer-key">
+        <button id="keyToggle" type="button" class="key-toggle" aria-expanded="false" aria-controls="keyField">
+          <span class="key-toggle-label">
+            <svg class="caret" width="8" height="8" viewBox="0 0 10 10" aria-hidden="true">
+              <path d="M3 1l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <svg class="key-icon" width="11" height="11" viewBox="0 0 12 12" aria-hidden="true">
+              <circle cx="4" cy="6" r="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/>
+              <path d="M6 6h5M9 6v2M11 6v2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            API key configured
+            <svg class="check-icon" width="11" height="11" viewBox="0 0 12 12" aria-hidden="true">
+              <path d="M2 6.5l2.5 2.5L10 3.5" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
+          <span class="key-toggle-edit">Edit</span>
+        </button>
+        <div id="keyField" class="key-field" hidden>
+          <input id="apiKey" type="password" class="key-input" placeholder="AIza..." spellcheck="false" autocomplete="off" aria-label="Google Maps API key">
+          <button id="keyEye" type="button" class="key-eye" title="Show/hide API key">
+            <img id="keyEyeIcon" src="../icons/eye-hide.png" width="14" height="14" alt="Toggle visibility">
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </section>
 
   <script src="../lib/usage.js"></script>
   <script src="popup.js"></script>
