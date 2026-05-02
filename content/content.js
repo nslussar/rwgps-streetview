@@ -405,6 +405,7 @@
     var prevY = cursorY;
     cursorX = event.clientX;
     cursorY = event.clientY;
+    schedulePositionOverlay();
 
     // Deactivate tracking when RWGPS stops sending position updates.
     // At high zoom (500ms): quick handoff to manual mode for gap filling.
