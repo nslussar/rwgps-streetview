@@ -295,10 +295,10 @@ input { font-family: inherit; font-variant-numeric: tabular-nums; }
 .link-btn:hover { text-decoration: underline; }
 
 .hero-number {
-  font-size: 26px;
+  font-size: 22px;
   font-weight: 600;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
   margin-bottom: 10px;
 }
 .hero-used { color: var(--ink); }
@@ -307,7 +307,7 @@ input { font-family: inherit; font-variant-numeric: tabular-nums; }
 .hero-divider, .hero-max {
   color: var(--max-mute);
   font-weight: 400;
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .over-cap-label {
@@ -461,32 +461,27 @@ input { font-family: inherit; font-variant-numeric: tabular-nums; }
   line-height: 1.4;
 }
 
-/* ───────── Footer API key ───────── */
-.footer-key {
-  margin-top: 14px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line);
-}
+/* ───────── Footer API key (mirrors .disclosure-section) ───────── */
 .key-toggle {
   width: 100%;
   border: none;
   background: none;
-  padding: 0;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: var(--dim);
-  font-size: 12px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
 }
-.key-toggle:hover .key-toggle-edit { color: var(--accent); }
-.key-toggle .caret { transition: transform 120ms; flex-shrink: 0; color: var(--ink); }
+.key-toggle .caret { transition: transform 120ms; flex-shrink: 0; }
 .key-toggle[aria-expanded="true"] .caret { transform: rotate(90deg); }
-.key-toggle-label { display: flex; align-items: center; gap: 6px; }
-.key-toggle-edit { font-size: 12px; }
+.key-toggle-label { display: flex; align-items: center; gap: 8px; }
 
 .key-field {
-  margin-top: 10px;
+  margin: 4px 0;
   display: flex;
   align-items: center;
   gap: 4px;

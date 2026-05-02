@@ -62,8 +62,8 @@ Near-quota (`used/max > 0.9`) is **not a separate state** — it just changes th
 
 ### 4.2 Hero quota
 - Eyebrow row: "Usage · {Month YYYY}" 12px/`dim`/500 — and a "Reset" link on the right (12px/`accent`/500). Reset clears the current-month counter (existing behavior — wire to whatever your reset action already calls).
-- Number: `{used.toLocaleString()}` 26px/600/-0.02 letter-spacing. Color: `ink` normal, `warn` if `used/max > 0.9`, `danger` if over-quota.
-- After the number, on the same line: ` / {max.toLocaleString()}` in 18px/400/`#a0a4ad`.
+- Number: `{used.toLocaleString()}` 22px/600/-0.015 letter-spacing. Color: `ink` normal, `warn` if `used/max > 0.9`, `danger` if over-quota.
+- After the number, on the same line: ` / {max.toLocaleString()}` in 16px/400/`#a0a4ad`.
 - 10px gap, then the bar.
 - **Bar:** 10px tall, `line` track, accent fill at `usedPct = used/max*100`. Fill color matches number (ink/warn/danger). **Cache does NOT appear in this bar** — the bar is billable usage only.
 - Below the bar, a small scale: "0" left, "10k" right, 11px/`dim`. (Use `${max/1000}k` for the right label.)
@@ -109,9 +109,11 @@ Each field: 12px/500 label with `(unit)` in 12px/400/`dim`, 30px input below (fu
 > **Behavior:** these are the existing 4 settings. Don't rename storage keys; just match labels/hints/order. If your current code uses different defaults, **keep your defaults** — these are illustrative.
 
 ### 4.7 Footer — API key
-- 14px margin-top, 10px padding-top, top border `line`.
-- Collapsed (default): one row, 12px/`dim`. Caret + key icon + "API key configured" + tiny green check + "Edit" link on the right. Whole row is the click target.
-- Expanded: a single 32px field below showing the masked key (`•••••••••••••••••••••••••• ` + last 5 chars), with an eye toggle on the right to reveal full key. Tapping the eye toggles between masked and full — no separate "Replace" button needed; the field accepts edits in place. (If your existing code requires explicit replace, add a small text "Replace" link to the right of the field — your call.)
+
+Same disclosure pattern as Advanced (§4.6) — same font, weight, padding, top border. Different content inside.
+
+- Collapsed (default): caret + key icon + "API key" + small green checkmark, all in `ink`/13px/500. No "Edit" link on the right — the whole row is the toggle.
+- Expanded: a single 32px field below showing the key fully masked (`••••••••••••••••••••••••••••••`), with an eye toggle on the right to reveal full key. Tapping the eye toggles between masked and full — no separate "Replace" button needed; the field accepts edits in place. (If your existing code requires explicit replace, add a small text "Replace" link to the right of the field — your call.)
 
 ---
 

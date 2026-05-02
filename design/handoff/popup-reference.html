@@ -201,9 +201,9 @@ function Popup({ state = 'active' }) {
                 <div style={{ fontSize: 12, color: dim, fontWeight: 500 }}>Usage · May 2026</div>
                 <button style={{ border: 'none', background: 'none', padding: 0, color: accent, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Reset</button>
               </div>
-              <div style={{ fontSize: 26, fontWeight: 600, lineHeight: 1.1, letterSpacing: -0.02, fontVariantNumeric: 'tabular-nums', marginBottom: 10 }}>
+              <div style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.15, letterSpacing: -0.015, fontVariantNumeric: 'tabular-nums', marginBottom: 10 }}>
                 <span style={{ color: isOver ? danger : (used / max > 0.9 ? warn : ink) }}>{used.toLocaleString()}</span>
-                <span style={{ color: '#a0a4ad', fontWeight: 400, fontSize: 18 }}> / {max.toLocaleString()}</span>
+                <span style={{ color: '#a0a4ad', fontWeight: 400, fontSize: 16 }}> / {max.toLocaleString()}</span>
               </div>
               {isOver && (
                 <div style={{ fontSize: 12, color: danger, marginBottom: 10, fontWeight: 500 }}>Monthly cap reached</div>
@@ -284,29 +284,28 @@ function Popup({ state = 'active' }) {
               </div>
             )}
 
-            {/* Footer key */}
-            <div style={{ marginTop: 14, paddingTop: 10, borderTop: `1px solid ${line}` }}>
+            {/* Footer key — matches Advanced styling */}
+            <div>
               <button onClick={() => setKeyExpanded(!keyExpanded)} aria-expanded={keyExpanded} style={{
-                width: '100%', border: 'none', background: 'none', padding: 0,
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                color: dim, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit'
+                width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                border: 'none', background: 'none', padding: '10px 0', borderTop: `1px solid ${line}`,
+                color: ink, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit'
               }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Caret open={keyExpanded} size={8} color={dim} />
-                  <KeyIcon size={11} color={dim} />
-                  API key configured
-                  <CheckIcon size={11} color="#22c55e" />
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Caret open={keyExpanded} />
+                  <KeyIcon size={12} color={ink} />
+                  API key
+                  <CheckIcon size={12} color="#22c55e" />
                 </span>
-                <span style={{ fontSize: 12 }}>Edit</span>
               </button>
               {keyExpanded && (
                 <div style={{
-                  marginTop: 10, display: 'flex', alignItems: 'center', gap: 8,
+                  marginTop: 4, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8,
                   height: 32, padding: '0 10px', borderRadius: 6,
                   border: '1px solid #e6e8ec', background: '#fafbfc'
                 }}>
                   <span style={{ flex: 1, fontSize: 12, color: '#33363d', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', letterSpacing: 0.04 }}>
-                    {showKey ? 'AIzaSyB-x9k3kdLm7QwVcF8tH2pnYrQzM8sAbCd' : '•••••••••••••••••••••••••• sAbCd'}
+                    {showKey ? 'AIzaSyB-x9k3kdLm7QwVcF8tH2pnYrQzM8sAbCd' : '••••••••••••••••••••••••••••••'}
                   </span>
                   <button onClick={() => setShowKey(!showKey)} aria-label={showKey ? 'Hide key' : 'Show key'} style={{ border: 'none', background: 'none', color: dim, cursor: 'pointer', padding: 4, display: 'flex' }}>
                     <EyeIcon off={showKey} />

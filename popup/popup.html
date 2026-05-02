@@ -158,29 +158,26 @@
         </div>
       </div>
 
-      <div class="footer-key">
-        <button id="keyToggle" type="button" class="key-toggle" aria-expanded="false" aria-controls="keyField">
-          <span class="key-toggle-label">
-            <svg class="caret" width="8" height="8" viewBox="0 0 10 10" aria-hidden="true">
-              <path d="M3 1l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <svg class="key-icon" width="11" height="11" viewBox="0 0 12 12" aria-hidden="true">
-              <circle cx="4" cy="6" r="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/>
-              <path d="M6 6h5M9 6v2M11 6v2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            API key configured
-            <svg class="check-icon" width="11" height="11" viewBox="0 0 12 12" aria-hidden="true">
-              <path d="M2 6.5l2.5 2.5L10 3.5" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </span>
-          <span class="key-toggle-edit">Edit</span>
+      <button id="keyToggle" type="button" class="key-toggle" aria-expanded="false" aria-controls="keyField">
+        <span class="key-toggle-label">
+          <svg class="caret" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+            <path d="M3 1l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <svg class="key-icon" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+            <circle cx="4" cy="6" r="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/>
+            <path d="M6 6h5M9 6v2M11 6v2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          API key
+          <svg class="check-icon" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+            <path d="M2 6.5l2.5 2.5L10 3.5" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </button>
+      <div id="keyField" class="key-field" hidden>
+        <input id="apiKey" type="password" class="key-input" placeholder="AIza..." spellcheck="false" autocomplete="off" aria-label="Google Maps API key">
+        <button id="keyEye" type="button" class="key-eye" title="Show/hide API key">
+          <img id="keyEyeIcon" src="../icons/eye-hide.png" width="14" height="14" alt="Toggle visibility">
         </button>
-        <div id="keyField" class="key-field" hidden>
-          <input id="apiKey" type="password" class="key-input" placeholder="AIza..." spellcheck="false" autocomplete="off" aria-label="Google Maps API key">
-          <button id="keyEye" type="button" class="key-eye" title="Show/hide API key">
-            <img id="keyEyeIcon" src="../icons/eye-hide.png" width="14" height="14" alt="Toggle visibility">
-          </button>
-        </div>
       </div>
 
     </div>
