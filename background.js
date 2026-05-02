@@ -170,9 +170,39 @@ chrome.tabs.onRemoved.addListener(function (tabId) {
   }
 });
 
+// `&return_error_code=true` is set on every SV URL by the content script,
+// so Google returns 403 REQUEST_DENIED / 429 OVER_QUERY_LIMIT directly.
+var HTTP_FORBIDDEN = 403;
+var HTTP_TOO_MANY_REQUESTS = 429;
+var RATE_LIMIT_WRITE_GAP_MS = 5000;
+var apiKeyInvalid = null;   // tri-state: null = unknown, avoids spurious remove on first 2xx after SW wake
+var rateLimitedLastWrite = 0;
+
 chrome.webRequest.onCompleted.addListener(function (details) {
   if (details.url.indexOf(STREETVIEW_METADATA_PATH) !== -1) return;
   recordIncrement(details.tabId, details.fromCache ? 'cached' : 'network');
+
+  // Cache hits already counted; statusCode is from Google but the request never reached them.
+  if (details.fromCache) return;
+  var sc = details.statusCode;
+  if (sc === HTTP_FORBIDDEN) {
+    if (apiKeyInvalid !== true) {
+      apiKeyInvalid = true;
+      chrome.storage.local.set({ apiKeyInvalid: true });
+    }
+  } else if (sc >= 200 && sc < 300) {
+    if (apiKeyInvalid !== false) {
+      apiKeyInvalid = false;
+      chrome.storage.local.remove('apiKeyInvalid');
+    }
+  }
+  if (sc === HTTP_TOO_MANY_REQUESTS) {
+    var now = Date.now();
+    if (now - rateLimitedLastWrite > RATE_LIMIT_WRITE_GAP_MS) {
+      rateLimitedLastWrite = now;
+      chrome.storage.local.set({ rateLimitedAt: now });
+    }
+  }
 }, { urls: [STREETVIEW_URL_FILTER] });
 
 chrome.runtime.onMessage.addListener(function (msg, sender) {

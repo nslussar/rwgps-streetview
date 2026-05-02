@@ -147,10 +147,12 @@
     var testImg = new Image();
     testImg.onload = function () {
       keyValid = true;
+      chrome.storage.local.remove('apiKeyInvalid');
       console.log('[RWGPS Street View] API key is valid (test image loaded, size: ' + testImg.naturalWidth + 'x' + testImg.naturalHeight + ')');
     };
     testImg.onerror = function () {
       keyValid = false;
+      chrome.storage.local.set({ apiKeyInvalid: true });
       console.log('[RWGPS Street View] API key validation failed (test image error). Try opening this URL in a browser tab to see the error: ' + testUrl);
     };
     if (!RwgpsApiBudget.tryStreetView()) {
