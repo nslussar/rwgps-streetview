@@ -40,3 +40,10 @@ The Street View Static API includes 10,000 free requests per month. See [Google 
 ## API Usage & Cap
 
 The extension enforces a configurable monthly cap on Street View Static API requests (default **10,000**, Google's free tier). The popup shows the monthly total, cap, and cache hits (which don't count toward the cap or bill against your key).
+
+## Advanced Settings
+
+- **Pano search radius (m)** — how far Google searches for a panorama around the requested point. Larger values fill gaps in coverage but may return a panorama noticeably off the road.
+- **Position rounding (m)** — snaps lat/lng/heading to a grid of this size so nearby re-hovers reuse the browser's cached image. `0` disables rounding.
+- **Min cursor move to refresh (m)** — suppresses new requests until the cursor moves at least this far from the last shown point. `0` refreshes on every move.
+- **Hover settle delay (ms)** — defers the image fetch until the cursor stops, so quick sweeps don't fire a request per point. The overlay still shows and repositions immediately. `0` fetches immediately.
