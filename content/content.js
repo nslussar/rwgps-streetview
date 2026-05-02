@@ -24,7 +24,7 @@
   const DEFAULT_SKIP_THRESHOLD_METERS = 10;
   const DEFAULT_DWELL_MS = 200;
   const HEADING_BUCKET_DEG = 15;
-  const METERS_PER_DEGREE = 111000;          // approx meters per degree of latitude
+  const MANUAL_SNAP_MAX_PIXELS = 10;         // max cursor-to-polyline distance to snap in manual mode
   // The skip threshold composes with the user's meters setting: the effective
   // value is max(userMeters, PIXEL_FLOOR_SKIP * metersPerPixelAtZoom). At high
   // zoom the user value dominates; at low zoom the pixel floor takes over so
@@ -504,11 +504,8 @@
       return;
     }
 
-    var metersPerPixel = RwgpsGeo.metersPerPixelAtZoom(latlng.lat, z);
-    var thresholdMeters = 10 * metersPerPixel;
-    var distMeters = nearest.distanceDeg * METERS_PER_DEGREE * Math.cos(latlng.lat * Math.PI / 180);
-
-    if (distMeters > thresholdMeters) {
+    var snapMaxMeters = MANUAL_SNAP_MAX_PIXELS * RwgpsGeo.metersPerPixelAtZoom(latlng.lat, z);
+    if (RwgpsGeo.distanceMeters(latlng, nearest) > snapMaxMeters) {
       startLingerTimer();
       return;
     }
