@@ -72,8 +72,6 @@
   let trackingDeactivateTimer = null;
   let lastActiveMode = null; // 'tracking' or 'manual' — for logging transitions
 
-  let markerScreenX = null;
-  let markerScreenY = null;
   let cachedMapRect = null; // cached getBoundingClientRect for mapContainer
   let lingerTimer = null; // delays overlay hide so user can click it
   let positionScheduled = false;
@@ -465,12 +463,6 @@
       lastActiveMode = 'tracking';
     }
 
-    if (data.containerPixel && mapContainer) {
-      var rect = getMapRect();
-      markerScreenX = rect.left + data.containerPixel.x;
-      markerScreenY = rect.top + data.containerPixel.y;
-    }
-
     if (lastShownPoint && RwgpsGeo.distanceMeters(lastShownPoint, data) < effectiveSkipMeters(skipThresholdMeters, data.lat)) {
       positionOverlay();
       showOverlay();
@@ -723,22 +715,8 @@
     var vw = window.innerWidth;
     var vh = window.innerHeight;
 
-    // In tracking mode, anchor to marker position on the map;
-    // in manual mode, anchor to cursor position.
     var anchorX = cursorX;
     var anchorY = cursorY;
-
-    if (trackingActive && markerScreenX !== null && markerScreenY !== null) {
-      if (markerScreenX >= 0 && markerScreenX <= vw &&
-          markerScreenY >= 0 && markerScreenY <= vh) {
-        anchorX = markerScreenX;
-        anchorY = markerScreenY;
-      } else {
-        // Marker is off-screen — center the overlay
-        anchorX = vw / 2;
-        anchorY = vh / 2 + oh / 2 + gap;
-      }
-    }
 
     var left = anchorX + gap;
     var top = anchorY - oh - gap;
@@ -762,9 +740,12 @@
     overlayEl.style.display = 'none';
     lastShownPoint = null;
     lastGeocodedPoint = null;
-    markerScreenX = null;
-    markerScreenY = null;
     cancelLingerTimer();
+    if (positionRafId !== null) {
+      cancelAnimationFrame(positionRafId);
+      positionRafId = null;
+      positionScheduled = false;
+    }
     clearTimeout(dwellTimer);
     dwellTimer = null;
     pendingDwellArgs = null;
