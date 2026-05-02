@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Street View Preview for RideWithGPS",
   "version": "0.0.0",
-  "description": "See Google Street View while planning routes on RideWithGPS. Hover over any route to preview the road ahead.",
+  "description": "Adds a Google Street View preview to the RideWithGPS route planner/viewer. Hover over the route to see street view.",
   "homepage_url": "https://github.com/nslussar/rwgps-streetview",
   "permissions": ["storage", "webRequest"],
   "host_permissions": ["https://maps.googleapis.com/*", "https://ridewithgps.com/*"],
