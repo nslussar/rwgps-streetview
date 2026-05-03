@@ -113,7 +113,10 @@ document.addEventListener('DOMContentLoaded', function () {
     bodyFirst.hidden = s !== STATE.FIRSTRUN;
     bodyMain.hidden = s === STATE.FIRSTRUN;
 
-    if (s === STATE.FIRSTRUN) return;
+    if (s === STATE.FIRSTRUN) {
+      apiKeyOnboardInput.focus();
+      return;
+    }
 
     invalidBlock.hidden = s !== STATE.INVALIDKEY;
     dimmable.classList.toggle('dimmed', s === STATE.INVALIDKEY);
