@@ -10,9 +10,9 @@ Hover over a RideWithGPS route to preview Google Street View. Scout entire cycli
 
 Hover anywhere on a RideWithGPS route and see a Google Street View preview of that exact spot — oriented in the direction the route is heading. Sweep your cursor along the route to scout the entire ride in seconds.
 
-The map alone doesn't show road conditions: surface type, shoulder width, traffic, blind corners. RideWithGPS has Google's pegman built in, but you have to drag it, drop it, peek, back out, and re-drag for every point you want to check. On a long route that adds up — cyclists in route-planning forums describe spending an hour clicking through Street View for an 80-mile ride.
+The map alone doesn't show road conditions: surface type, shoulder width, traffic. RideWithGPS has Google's pegman built in, but you have to drag it, drop it, peek, back out, and re-drag for every point you want to check.
 
-This extension replaces that workflow with a continuous hover preview.
+This extension adds a continuous street view hover over the route & elevation map.
 
 Features:
 - Hover near any part of a route to see a Google Street View image
