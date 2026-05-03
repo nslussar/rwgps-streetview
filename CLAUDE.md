@@ -60,7 +60,7 @@ Supporting files:
 ## Build and release
 
 - No build tools or npm — plain JavaScript
-- `make build` creates a zip in `build/` for Chrome Web Store upload
+- `make build` creates a zip in `build/` for Chrome Web Store upload. The zip's file list is **explicit** (not glob-based) — every new top-level file or directory referenced by `manifest.json` must be added to the `zip` invocation in the `Makefile`, or the Web Store will reject the package with `Could not load <thing> ''.` (1.1.0 shipped broken because `background.js` was added to the manifest but never to the zip list). When touching the manifest or adding a new asset, diff `unzip -l build/*.zip` against `manifest.json` references before tagging.
 - `make release` auto-bumps the patch version from the latest tag, creates the git tag, and pushes it to trigger the GitHub Actions release workflow
 - Release workflow sets `manifest.json` version from the git tag (manifest stores `0.0.0` as placeholder)
 - GitHub repo: https://github.com/nslussar/rwgps-streetview
