@@ -480,8 +480,15 @@ input { font-family: inherit; font-variant-numeric: tabular-nums; }
 .key-toggle[aria-expanded="true"] .caret { transform: rotate(90deg); }
 .key-toggle-label { display: flex; align-items: center; gap: 8px; }
 
-.key-field {
+.key-field-row {
   margin: 4px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.key-field {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -520,3 +527,18 @@ input { font-family: inherit; font-variant-numeric: tabular-nums; }
 }
 .key-eye:hover { opacity: 0.85; }
 .key-eye img { display: block; }
+.key-delete {
+  width: 24px;
+  height: 32px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
+  color: var(--dim);
+}
+.key-delete:hover { color: var(--danger); background: var(--danger-bg); }

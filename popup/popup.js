@@ -59,6 +59,7 @@ document.addEventListener('DOMContentLoaded', function () {
   var apiKeyInput = $('apiKey');
   var keyEye = $('keyEye');
   var keyEyeIcon = $('keyEyeIcon');
+  var keyDelete = $('keyDelete');
   var apiKeyOnboardEye = $('apiKeyOnboardEye');
   var apiKeyOnboardEyeIcon = $('apiKeyOnboardEyeIcon');
 
@@ -281,6 +282,12 @@ document.addEventListener('DOMContentLoaded', function () {
     chrome.storage.sync.set({ apiKey: '' });
     chrome.storage.local.remove(['apiKeyInvalid']);
     apiKeyOnboardInput.focus();
+  });
+
+  keyDelete.addEventListener('click', function () {
+    apiKeyInput.value = '';
+    chrome.storage.sync.set({ apiKey: '' });
+    chrome.storage.local.remove(['apiKeyInvalid']);
   });
 
   resetBtn.addEventListener('click', function () {

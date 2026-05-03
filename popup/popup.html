@@ -175,10 +175,18 @@
           </svg>
         </span>
       </button>
-      <div id="keyField" class="key-field" hidden>
-        <input id="apiKey" type="password" class="key-input" placeholder="AIza..." spellcheck="false" autocomplete="off" aria-label="Google Maps API key">
-        <button id="keyEye" type="button" class="key-eye" title="Show/hide API key">
-          <img id="keyEyeIcon" src="../icons/eye-hide.png" width="14" height="14" alt="Toggle visibility">
+      <div id="keyField" class="key-field-row" hidden>
+        <div class="key-field">
+          <input id="apiKey" type="password" class="key-input" placeholder="AIza..." spellcheck="false" autocomplete="off" aria-label="Google Maps API key">
+          <button id="keyEye" type="button" class="key-eye" title="Show/hide API key">
+            <img id="keyEyeIcon" src="../icons/eye-hide.png" width="14" height="14" alt="Toggle visibility">
+          </button>
+        </div>
+        <button id="keyDelete" type="button" class="key-delete" title="Delete API key" aria-label="Delete API key">
+          <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+            <path d="M2.5 4h9M5.5 4V2.75a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 .75.75V4M3.75 4l.55 7.3a.75.75 0 0 0 .75.7h3.9a.75.75 0 0 0 .75-.7L10.25 4M6 6.5v3.5M8 6.5v3.5"
+                  fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
         </button>
       </div>
 
