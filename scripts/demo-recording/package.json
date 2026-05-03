@@ -1,0 +1,14 @@
+{
+  "name": "rwgps-streetview-demo-recording",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Playwright-driven recording of the Web Store demo video",
+  "scripts": {
+    "setup": "node setup-profile.js",
+    "demo": "node demo.js",
+    "build-cut": "node build-cut.js"
+  },
+  "dependencies": {
+    "playwright": "^1.48.0"
+  }
+}

@@ -4,3 +4,10 @@
 .claude/
 build/
 .worktrees/
+node_modules/
+.playwright-mcp/
+scripts/demo-recording/secrets.json
+scripts/demo-recording/.chrome-profile/
+scripts/demo-recording/screenmovies/
+scripts/demo-recording/recon/
+scripts/demo-recording/segment-thumbs/

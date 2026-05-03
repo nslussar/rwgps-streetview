@@ -65,6 +65,28 @@ Supporting files:
 - Release workflow sets `manifest.json` version from the git tag (manifest stores `0.0.0` as placeholder)
 - GitHub repo: https://github.com/nslussar/rwgps-streetview
 
+## Web Store demo video
+
+Lives in `scripts/demo-recording/`. Has its own `package.json` (Playwright dependency, isolated from the rest of the repo). Two-stage pipeline:
+
+1. **Record raw clips manually** with QuickTime "Record Selection" while a clean Chromium is open on the route. The launch harness is `npm run demo` (after `npm run setup` once to create a profile and pin the extension):
+  - `setup-profile.js` — one-time: launches Chromium with the unpacked extension, user pins the toolbar icon, profile saved to `.chrome-profile/`.
+  - `demo.js` — every run: clears `chrome.storage` so the popup re-enters firstrun state, seeds `dwellMs:50` and the `apiUsage` counter for a populated meter, opens the route at a maximized window, then waits on a keypress prompt. The user records freely (real OS cursor, all browser-chrome interactions) and presses any key to close. Earlier iterations of this script automated cursor sweeps via Playwright; that's been removed because OS cursor + Playwright synthetic cursor look jarringly different on screen.
+  - Raw recordings live in `screenmovies/` (gitignored except for the final cut).
+
+2. **Compose the final cut** from the raw recordings via `npm run build-cut`:
+  - `segments.json` — single source of truth: list of source `.mov` files, per-segment frame ranges + computed PTS time ranges, captions, per-segment lingers, transition style/duration, title-card text and font size.
+  - `build-cut.js` — reads `segments.json`, computes xfade offsets + caption windows from segment durations and lingers, invokes ffmpeg with one big `-filter_complex`. Each segment is `tpad`-ed with cloned-last-frame for `linger_s + xfade_dur` seconds so the section plays fully, holds, then fades through black into the next section. Final clip is a generated black-bg + centered-white-text title card.
+
+**Why frame numbers ≠ time × 60.** QuickTime screen recordings are variable-frame-rate but advertise a 60fps `r_frame_rate`. The QT player's frame counter shows sequential decoded frames (1, 2, 3...), so frame N's wall-clock timestamp is the Nth frame's actual PTS — NOT `N/60`. To convert frame numbers to PTS for editing `segments.json`:
+
+```
+ffprobe -v error -select_streams v:0 -show_entries frame=pts_time \
+  -of csv=p=0 SOURCE | awk 'NR==FRAME {print}'
+```
+
+**ffmpeg requirements.** `drawtext` (libfreetype) and `subtitles`/`ass` (libass) aren't in homebrew's stripped `ffmpeg` formula as of 2026-05. Use the `homebrew-ffmpeg/ffmpeg/ffmpeg-full` formula instead — `build-cut.js` defaults to `/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg` (overridable via `FFMPEG` env var).
+
 ## Testing
 
 - **Unit tests** (`test/*.test.js`) cover the pure helpers in `lib/geo.js` and `lib/usage.js`. Run via `make test` (uses Node's built-in `node --test`, no npm/deps). Add a test alongside any change to those files. Chrome-extension surfaces (`content/`, `background.js`, `popup/`) are not unit-tested — they need DOM/`chrome.*`/Google Maps mocks.

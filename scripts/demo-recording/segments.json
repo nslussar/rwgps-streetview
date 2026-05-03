@@ -1,0 +1,110 @@
+{
+  "_comment": [
+    "Segment spec for the Web Store demo video. The build script reads this and",
+    "produces the final cut. Frame numbers are sequential decode-frames (what a",
+    "video player like QuickTime shows in its frame counter), NOT PTS-based.",
+    "Sources are variable-frame-rate (VFR) — frame timestamps are NOT evenly",
+    "spaced — so we look up the exact PTS for each decoded frame index via",
+    "ffprobe rather than dividing by an effective_fps. ffmpeg's `trim` then cuts",
+    "by those real PTS times.",
+    "",
+    "To recompute time_range_s after editing frame_range, run:",
+    "  ffprobe -v error -select_streams v:0 -show_entries frame=pts_time \\",
+    "    -of csv=p=0 SOURCE | awk 'NR==FRAME {print}'",
+    "",
+    "linger_s controls how long the last frame holds before the fade-through-",
+    "black transition starts. Default 0.3s. Bump per segment to slow a beat down."
+  ],
+
+  "sources": {
+    "screen-settings.mov": {
+      "duration_s": 31.512,
+      "nb_frames": 713,
+      "advertised_fps": 60,
+      "vfr": true
+    },
+    "screen-final1.mov": {
+      "duration_s": 72.177,
+      "nb_frames": 2220,
+      "advertised_fps": 60,
+      "vfr": true
+    },
+    "screen-delete-api.mov": {
+      "duration_s": 16.625,
+      "nb_frames": 466,
+      "advertised_fps": 60,
+      "vfr": true
+    }
+  },
+
+  "transitions": {
+    "type": "fadeblack",
+    "duration_s": 1.0,
+    "default_linger_s": 0.3
+  },
+
+  "title_card": {
+    "text": "Hover Street View for RideWithGPS",
+    "font_size": 140,
+    "duration_s": 3
+  },
+
+  "segments": [
+    {
+      "id": "api_key",
+      "caption": "Set up your Google Maps API key",
+      "source": "screen-settings.mov",
+      "frame_range": [114, 303],
+      "time_range_s": [2.433, 9.083],
+      "linger_s": 0.3
+    },
+    {
+      "id": "switch_map",
+      "caption": "Switch to Google Maps view",
+      "source": "screen-final1.mov",
+      "frame_range": [543, 653],
+      "time_range_s": [13.867, 16.517],
+      "linger_s": 1.3
+    },
+    {
+      "id": "hover_route_wide",
+      "caption": "Hover the route to preview Street View",
+      "source": "screen-final1.mov",
+      "frame_range": [672, 923],
+      "time_range_s": [17.717, 25.700],
+      "linger_s": 1.3
+    },
+    {
+      "id": "zoom_and_hover_tight",
+      "caption": "Zoom in for street-level detail",
+      "source": "screen-final1.mov",
+      "frame_range": [923, 1249],
+      "time_range_s": [25.700, 35.117],
+      "linger_s": 0.3
+    },
+    {
+      "id": "hover_elevation",
+      "caption": "Hover the elevation chart too",
+      "source": "screen-final1.mov",
+      "frame_range": [1282, 1503],
+      "time_range_s": [37.250, 45.550],
+      "linger_s": 0.3
+    },
+    {
+      "id": "tweak_advanced",
+      "caption": "Tweak the Street View settings",
+      "source": "screen-settings.mov",
+      "frame_range": [367, 659],
+      "time_range_s": [17.550, 25.867],
+      "linger_s": 0.3
+    },
+    {
+      "id": "delete_api_key",
+      "caption": "Replace or delete your API key",
+      "source": "screen-delete-api.mov",
+      "frame_range": [240, 407],
+      "time_range_s": [6.183, 13.450],
+      "linger_s": 0.3
+    }
+  ]
+}
