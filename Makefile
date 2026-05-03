@@ -11,6 +11,7 @@ build:
 	rm -f build/rwgps-streetview-$(VERSION).zip
 	zip -r build/rwgps-streetview-$(VERSION).zip \
 		manifest.json \
+		background.js \
 		content/ \
 		lib/ \
 		popup/ \
