@@ -118,6 +118,14 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
 
+    // Restore the user's last Advanced-disclosure choice. The mutex with the
+    // API-key disclosure means only one can be open at a time, so opening
+    // Advanced here also implies the key disclosure stays closed (its default).
+    if (state.advancedExpanded) {
+      advToggle.setAttribute('aria-expanded', 'true');
+      advancedGrid.hidden = false;
+    }
+
     invalidBlock.hidden = s !== STATE.INVALIDKEY;
     dimmable.classList.toggle('dimmed', s === STATE.INVALIDKEY);
 
@@ -181,7 +189,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
   chrome.storage.sync.get(
     ['apiKey', 'radius', 'apiCap', 'apiCapEnabled',
-     'bucketMeters', 'skipThresholdMeters', 'dwellMs'],
+     'bucketMeters', 'skipThresholdMeters', 'dwellMs',
+     'popupAdvancedExpanded'],
     function (result) {
       state.apiKey = result.apiKey || '';
       apiKeyOnboardInput.value = state.apiKey;
@@ -194,6 +203,7 @@ document.addEventListener('DOMContentLoaded', function () {
       state.capEnabled = result.apiCapEnabled !== false;
       apiCapInput.value = state.cap;
       apiCapEnabledInput.checked = state.capEnabled;
+      state.advancedExpanded = !!result.popupAdvancedExpanded;
       initialReadDone();
     }
   );
@@ -280,6 +290,16 @@ document.addEventListener('DOMContentLoaded', function () {
   bindDisclosure(advToggle, advancedGrid, bodyGroup);
   bindDisclosure(keyToggle, keyField, bodyGroup);
   bindDisclosure(howToToggle, howToList);
+
+  // Persist the Advanced disclosure across popup opens. Listens on both
+  // bodyGroup buttons because clicking the API-key toggle closes Advanced via
+  // the mutex inside bindDisclosure (which already ran by the time this fires).
+  function persistAdvancedExpanded() {
+    var open = advToggle.getAttribute('aria-expanded') === 'true';
+    chrome.storage.sync.set({ popupAdvancedExpanded: open });
+  }
+  advToggle.addEventListener('click', persistAdvancedExpanded);
+  keyToggle.addEventListener('click', persistAdvancedExpanded);
 
   replaceKeyBtn.addEventListener('click', function () {
     chrome.storage.sync.set({ apiKey: '' });
