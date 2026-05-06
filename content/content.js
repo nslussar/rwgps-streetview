@@ -32,8 +32,16 @@
   // intentionally not auto-scaled — large buckets at low zoom would snap
   // requests onto neighboring streets / off-coverage spots.
   const PIXEL_FLOOR_SKIP = 5;
+  // streetviewpixels-pa tile endpoint (free, no API key). At zoom=4 the panorama
+  // is split into a worldSize/1024 grid (e.g. 16×8 for standard SV-car captures,
+  // but trekker / photo-path panoramas have non-standard dimensions). Actual
+  // grid dimensions come from `tiles.worldSize` in the getPanorama response.
+  const TILE_BASE = 'https://streetviewpixels-pa.googleapis.com/v1/tile';
+  const DEFAULT_X_TILES = 16; // fallback when worldSize is unavailable
+  const DEFAULT_Y_TILES = 8;
   let apiKey = '';
   let enabled = true;
+  let useFreeTilePipeline = true;
   let radius = DEFAULT_RADIUS;
   let bucketMeters = DEFAULT_BUCKET_METERS;
   let skipThresholdMeters = DEFAULT_SKIP_THRESHOLD_METERS;
@@ -46,6 +54,8 @@
   let lastShownPoint = null;
   let overlayEl = null;
   let overlayImg = null;
+  let overlayTilesEl = null;
+  let overlayTiles = []; // [tl, tr, bl, br] order matches grid layout
   let noCoverageEl = null;
   let streetLabelEl = null;
   let headingLabelEl = null;
@@ -59,6 +69,13 @@
   // Tracking mode state
   let trackingActive = false;
   let trackingTimeout = null;
+
+  // Pano-lookup state for the free-tile pipeline. `pendingPanoHeading` is
+  // safe as a single var because we only honor the response whose requestId
+  // matches the latest counter — stale responses get dropped before the
+  // heading is read.
+  let panoLookupCounter = 0;
+  let pendingPanoHeading = 0;
 
   // Manual mode state
   let pendingLatLng = null;
@@ -81,22 +98,23 @@
 
   function init() {
     RwgpsApiBudget.init();
-    chrome.storage.sync.get(['apiKey', 'enabled', 'radius', 'bucketMeters', 'skipThresholdMeters', 'dwellMs'], function (result) {
+    chrome.storage.sync.get(['apiKey', 'enabled', 'useFreeTilePipeline', 'radius', 'bucketMeters', 'skipThresholdMeters', 'dwellMs'], function (result) {
       apiKey = result.apiKey || '';
       enabled = result.enabled !== false;
+      useFreeTilePipeline = result.useFreeTilePipeline !== false; // default true
       radius = result.radius || DEFAULT_RADIUS;
       bucketMeters = numOr(result.bucketMeters, DEFAULT_BUCKET_METERS);
       skipThresholdMeters = numOr(result.skipThresholdMeters, DEFAULT_SKIP_THRESHOLD_METERS);
       dwellMs = numOr(result.dwellMs, DEFAULT_DWELL_MS);
 
-      if (!apiKey) {
-        console.log('[RWGPS Street View] No API key configured. Will initialize when key is set.');
+      if (!apiKey && !useFreeTilePipeline) {
+        console.log('[RWGPS Street View] No API key configured and free-tile pipeline disabled. Idle.');
         return;
       }
 
       if (!enabled) return;
 
-      validateApiKey();
+      if (apiKey && !useFreeTilePipeline) validateApiKey();
       injectBridge();
       createOverlay();
       listenForBridgeMessages();
@@ -108,10 +126,23 @@
         var hadKey = !!apiKey;
         apiKey = changes.apiKey.newValue || '';
         keyValid = null;
-        if (apiKey) validateApiKey();
-        // If this is the first time an API key is set, run full setup
-        if (!hadKey && apiKey && enabled) {
+        if (apiKey && !useFreeTilePipeline) validateApiKey();
+        // If this is the first time an API key is set and we weren't already
+        // running (free-tile pipeline disabled), run full setup
+        if (!hadKey && apiKey && enabled && !bridgeReady && !useFreeTilePipeline) {
           console.log('[RWGPS Street View] API key set, running late initialization');
+          injectBridge();
+          createOverlay();
+          listenForBridgeMessages();
+          waitForMap();
+        }
+      }
+      if (changes.useFreeTilePipeline) {
+        var prev = useFreeTilePipeline;
+        useFreeTilePipeline = changes.useFreeTilePipeline.newValue !== false;
+        // Late init when enabling free pipeline without an API key set
+        if (!prev && useFreeTilePipeline && enabled && !bridgeReady) {
+          console.log('[RWGPS Street View] Free-tile pipeline enabled, running late initialization');
           injectBridge();
           createOverlay();
           listenForBridgeMessages();
@@ -135,6 +166,10 @@
         dwellMs = numOr(changes.dwellMs.newValue, DEFAULT_DWELL_MS);
       }
     });
+  }
+
+  function isOperational() {
+    return enabled && (apiKey || useFreeTilePipeline);
   }
 
   function numOr(v, fallback) {
@@ -196,6 +231,20 @@
     overlayImg = document.createElement('img');
     overlayImg.alt = 'Street View preview';
 
+    overlayTilesEl = document.createElement('div');
+    overlayTilesEl.className = 'sv-tiles';
+    var tileClasses = [
+      'sv-tile sv-tile-tl', 'sv-tile sv-tile-tm', 'sv-tile sv-tile-tr',
+      'sv-tile sv-tile-bl', 'sv-tile sv-tile-bm', 'sv-tile sv-tile-br'
+    ];
+    overlayTiles = tileClasses.map(function (cls) {
+      var t = document.createElement('img');
+      t.className = cls;
+      t.alt = '';
+      overlayTilesEl.appendChild(t);
+      return t;
+    });
+
     loadingEl = document.createElement('div');
     loadingEl.className = 'sv-loading';
     var spinner = document.createElement('div');
@@ -223,6 +272,7 @@
     headingArrowEl.appendChild(arrowImg);
 
     overlayEl.appendChild(overlayImg);
+    overlayEl.appendChild(overlayTilesEl);
     overlayEl.appendChild(loadingEl);
     overlayEl.appendChild(noCoverageEl);
     overlayEl.appendChild(streetLabelEl);
@@ -252,6 +302,9 @@
             break;
           case 'GEOCODE_RESULT':
             handleGeocodeResult(msg.data, msg.requestId);
+            break;
+          case 'PANO_INFO':
+            handlePanoInfo(msg.data, msg.requestId);
             break;
           case 'PONG':
             if (msg.data.mapFound) onBridgeReady();
@@ -394,7 +447,7 @@
   }
 
   function onMouseMove(event) {
-    if (!enabled || !apiKey) return;
+    if (!isOperational()) return;
 
     var prevX = cursorX;
     var prevY = cursorY;
@@ -445,7 +498,7 @@
   // --- Tracking Mode (piggyback on RWGPS hover marker) ---
 
   function handleTrackingPosition(data) {
-    if (!enabled || !apiKey) return;
+    if (!isOperational()) return;
 
     // Ensure mouse listeners are attached (tracking can activate before MAP_READY)
     if (!mapContainer) {
@@ -623,6 +676,10 @@
   }
 
   function updateStreetViewImage(lat, lng, heading) {
+    if (useFreeTilePipeline) {
+      updateStreetViewImageViaFreeTile(lat, lng, heading);
+      return;
+    }
     if (keyValid === false) {
       overlayImg.style.display = 'none';
       noCoverageEl.textContent = 'Invalid API key — check extension settings';
@@ -674,6 +731,7 @@
       hasLoadedImage = true;
       overlayImg.src = url;
       overlayImg.style.display = 'block';
+      overlayTilesEl.style.display = 'none';
       loadingEl.style.display = 'none';
       noCoverageEl.style.display = 'none';
     };
@@ -681,6 +739,7 @@
       if (id !== preloadCounter) return; // stale
       clearTimeout(loadingSpinnerTimer);
       overlayImg.style.display = 'none';
+      overlayTilesEl.style.display = 'none';
       loadingEl.style.display = 'none';
       noCoverageEl.textContent = navigator.onLine
         ? 'No Street View coverage here'
@@ -688,6 +747,135 @@
       noCoverageEl.style.display = 'flex';
     };
     preload.src = url;
+  }
+
+  // --- Free-tile pipeline (no API key, uses streetviewpixels-pa tile endpoint) ---
+
+  function updateStreetViewImageViaFreeTile(lat, lng, heading) {
+    var b = RwgpsGeo.bucketLatLng(lat, lng, bucketMeters);
+    var h = RwgpsGeo.bucketHeading(heading, HEADING_BUCKET_DEG);
+
+    requestGeocode(b.lat, b.lng);
+
+    var id = ++panoLookupCounter;
+    pendingPanoHeading = h;
+
+    // Delay spinner when a previous image is already visible (mirrors Static API path)
+    clearTimeout(loadingSpinnerTimer);
+    if (!hasLoadedImage) {
+      loadingEl.style.display = 'flex';
+      noCoverageEl.style.display = 'none';
+    } else {
+      loadingSpinnerTimer = setTimeout(function () {
+        if (id === panoLookupCounter) loadingEl.style.display = 'flex';
+      }, 500);
+    }
+
+    window.postMessage({
+      type: PREFIX + 'REQUEST',
+      action: 'LOOKUP_PANO',
+      data: { lat: b.lat, lng: b.lng, radius: radius },
+      requestId: id
+    }, '*');
+  }
+
+  function buildTileUrl(panoid, x, y) {
+    return TILE_BASE
+      + '?cb_client=maps_sv.tactile'
+      + '&panoid=' + encodeURIComponent(panoid)
+      + '&x=' + x + '&y=' + y
+      + '&zoom=4&nbt=1&fover=2';
+  }
+
+  function handlePanoInfo(data, requestId) {
+    if (requestId !== panoLookupCounter) return; // stale
+
+    if (data.error) {
+      clearTimeout(loadingSpinnerTimer);
+      overlayImg.style.display = 'none';
+      overlayTilesEl.style.display = 'none';
+      loadingEl.style.display = 'none';
+      noCoverageEl.textContent = data.noCoverage
+        ? 'No Street View coverage here'
+        : (navigator.onLine ? 'Street View lookup failed' : 'Could not load — check your connection');
+      noCoverageEl.style.display = 'flex';
+      return;
+    }
+
+    // Tile-grid dimensions vary per panorama (standard SV-car captures are
+    // 16×8 at zoom=4, but trekker / photo-path panoramas are non-standard
+    // and will INVALID_ARGUMENT for x or y outside their range).
+    var xTiles = DEFAULT_X_TILES;
+    var yTiles = DEFAULT_Y_TILES;
+    if (data.worldSize && data.worldSize.width && data.worldSize.height) {
+      xTiles = Math.max(1, Math.round(data.worldSize.width / 1024));
+      yTiles = Math.max(2, Math.round(data.worldSize.height / 1024));
+    }
+    var degPerXTile = 360 / xTiles;
+    // Choose y rows that flank the horizon. For standard 8-tall: y=3, y=4.
+    // For non-standard heights: middle pair.
+    var yTop = Math.max(0, Math.floor(yTiles / 2) - 1);
+    var yBot = Math.min(yTiles - 1, Math.floor(yTiles / 2));
+
+    // 3-wide tile selection. The middle tile (T) contains the route heading.
+    // We render T-1 and T+1 alongside it so we have horizontal pan room to
+    // sub-tile-shift the inner div, putting the heading exactly at the
+    // viewport's horizontal center regardless of where it falls within tile T.
+    // The +180° offset accounts for the tile-x convention being opposite
+    // of the world heading: x=0 looks "backward" from originHeading.
+    var rel = (((pendingPanoHeading - data.originHeading + 180) % 360) + 360) % 360;
+    var floorIdx = Math.floor(rel / degPerXTile);
+    var T = ((floorIdx % xTiles) + xTiles) % xTiles;
+    var leftX  = ((T - 1) % xTiles + xTiles) % xTiles;
+    var midX   = T;
+    var rightX = (T + 1) % xTiles;
+    var frac = (rel / degPerXTile) - floorIdx; // [0, 1)
+
+    // 6 tiles in (tl, tm, tr, bl, bm, br) order — must match overlayTiles array.
+    var urls = [
+      buildTileUrl(data.panoid, leftX,  yTop),
+      buildTileUrl(data.panoid, midX,   yTop),
+      buildTileUrl(data.panoid, rightX, yTop),
+      buildTileUrl(data.panoid, leftX,  yBot),
+      buildTileUrl(data.panoid, midX,   yBot),
+      buildTileUrl(data.panoid, rightX, yBot)
+    ];
+
+    var pid = ++preloadCounter;
+    var loaded = 0;
+    var done = false;
+    urls.forEach(function (url, i) {
+      var pre = new Image();
+      pre.onload = function () {
+        if (pid !== preloadCounter || done) return;
+        loaded++;
+        if (loaded === 6) {
+          done = true;
+          clearTimeout(loadingSpinnerTimer);
+          hasLoadedImage = true;
+          // Sub-tile horizontal shift so the heading lands at viewport center
+          overlayTilesEl.style.transform = 'translateX(' + (-200 * frac) + 'px)';
+          for (var j = 0; j < 6; j++) overlayTiles[j].src = urls[j];
+          overlayImg.style.display = 'none';
+          overlayTilesEl.style.display = 'block';
+          loadingEl.style.display = 'none';
+          noCoverageEl.style.display = 'none';
+        }
+      };
+      pre.onerror = function () {
+        if (pid !== preloadCounter || done) return;
+        done = true;
+        clearTimeout(loadingSpinnerTimer);
+        overlayImg.style.display = 'none';
+        overlayTilesEl.style.display = 'none';
+        loadingEl.style.display = 'none';
+        noCoverageEl.textContent = navigator.onLine
+          ? 'Tile load failed'
+          : 'Could not load — check your connection';
+        noCoverageEl.style.display = 'flex';
+      };
+      pre.src = url;
+    });
   }
 
   // Coalesce mousemove-driven repositions to one paint per frame.

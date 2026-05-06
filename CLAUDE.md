@@ -2,7 +2,12 @@
 
 ## Project overview
 
-Chrome extension (Manifest V3) that shows a Google Street View static image overlay when hovering over routes on ridewithgps.com. Works when Google Maps is selected as the map type in the RWGPS route editor.
+Chrome extension (Manifest V3) that shows a Google Street View overlay when hovering over routes on ridewithgps.com. Works when Google Maps is selected as the map type in the RWGPS route editor.
+
+Two image pipelines, switchable via the popup's top-of-screen toggle (`useFreeTilePipeline` in `chrome.storage.sync`, default `true`):
+
+- **Free-tile pipeline (default).** Uses `streetviewpixels-pa.googleapis.com/v1/tile` — the same un-keyed endpoint Google's pegman drag-preview uses. No API key, no Google Cloud project, no monthly cap. 3×2 stitched tile grid (4 of which are usually visible) with sub-tile horizontal centering on the route heading. Design source of truth: `docs/design/streetviewpixels/README.md`.
+- **Static API pipeline (kill-switch fallback).** Falls back to `maps.googleapis.com/maps/api/streetview` with the user's API key, gated by a configurable monthly cap. Original v1 path; preserved so the user can flip back if the free pipeline misbehaves on a route.
 
 ## Architecture
 
@@ -14,9 +19,11 @@ Three execution contexts:
   - Only forwards `setPosition` when the marker is visible (avoids fighting `TRACKING_LOST` deactivation)
   - Hooks `setVisible(true)` to send position immediately on marker reappear
   - Forwards tracking positions to the content script (throttled to 150ms)
-  - Handles pixel-to-latlng conversion and reverse geocoding
+  - Handles pixel-to-latlng conversion, reverse geocoding, and **panorama lookup** (`LOOKUP_PANO` request → `PANO_INFO` response with panoid + originHeading + worldSize). Panorama lookup uses `StreetViewService.getPanorama()` resolved via `getStreetViewLib()` which handles both the legacy `google.maps.StreetViewService` global and the new dynamic `google.maps.importLibrary('streetView')` pattern. Filters to `source: StreetViewSource.GOOGLE` to exclude user-contributed photospheres.
 - **Content script** (`content/content.js`) — Runs in the ISOLATED world.
-  - Manages overlay DOM (Street View image, street name label, heading display, no-coverage indicator)
+  - Manages overlay DOM. Two image-rendering paths share the same overlay container:
+    - **Free-tile path** renders into a 3×2 `<img>` grid (`.sv-tiles` div with 6 children) — leftX/midX/rightX columns × yTop/yBot rows. The inner div is positioned with `top:-75px` (vertical horizon-centering crop) plus a JS-set `translateX(-200 * frac)` for sub-tile horizontal centering of the heading.
+    - **Static API path** renders into the single direct-child `<img>`. Each path hides the other on swap.
   - Two modes switch dynamically: **tracking mode** (piggybacks on RWGPS's hover marker) and **manual mode** (own pixel-to-latlng + nearest-point calculation)
   - RWGPS destroys and recreates the tracking marker when cursor leaves/returns to the route
   - Zoom-aware deactivation: 500ms at high zoom (quick handoff to manual mode), 2s at low zoom (safety net for destroyed markers)
@@ -56,6 +63,33 @@ Supporting files:
 - **Bucketing gotcha** (`lib/geo.js:bucketLatLng`): snap lat FIRST, then derive `cosLat` from the snapped lat. Computing `cosLat` from the raw input lat causes points in the same lat-cell to use slightly different `lngStep` values, which can flip lng across a bucket boundary and produce distinct URLs (cache misses) for points well inside one logical bucket.
 - **`chrome.webRequest` permissions gotcha**: webRequest events fire only when the extension has `host_permissions` for BOTH the destination URL AND the initiator page. Manifest declares both `https://maps.googleapis.com/*` and `https://ridewithgps.com/*` for this reason — `content_scripts.matches` is NOT a substitute despite chrome://extensions UI conflating them under "Site access".
 - **Popup error signals** (written by `background.js`, read by `popup.js`): `apiKeyInvalid` (sticky bool in `chrome.storage.local`, set on 403 REQUEST_DENIED, cleared on next 2xx) drives the invalid-key state. `rateLimitedAt` (timestamp, throttled to one write per 5s) drives the transient rate-limit notice (popup hides after 60s). Both rely on `&return_error_code=true` so Google returns 403/429 directly instead of an opaque "generic error" PNG.
+
+## Free-tile pipeline (`streetviewpixels-pa`)
+
+The default path. Bypasses the Street View Static API and uses the same un-keyed tile endpoint Google's pegman drag-preview hits. **Anything reached via "normal interaction" with the loaded Maps JS API is free** — `StreetViewService.getPanorama()` for metadata + `streetviewpixels-pa.googleapis.com/v1/tile` for image tiles. No API key in URLs, CORS-enabled, paid by neither us nor RWGPS (it's an intrinsic Maps JS feature).
+
+> **Full design + source-code map:** [`docs/design/streetviewpixels/README.md`](docs/design/streetviewpixels/README.md). That doc has a "Where to find each piece in the source" table with file:line pointers — start there before re-reading the code.
+
+- **Tile URL shape:** `https://streetviewpixels-pa.googleapis.com/v1/tile?cb_client=maps_sv.tactile&panoid={pano}&x={x}&y={y}&zoom=4&nbt=1&fover=2`. We always use `zoom=4` — that's a tile-grid level, not a user-zoom. Each tile is 512×512.
+- **Per-panorama tile geometry.** Number of tiles varies per panorama. Standard Google SV-car captures are 16×8 at zoom=4 (22.5° per tile horizontally, 22.5° per tile vertically). Trekker / photo-path captures are non-standard (e.g. 13×7). Read `tiles.worldSize` from the `getPanorama` response and divide by 1024 to get the actual `xTiles × yTiles` at zoom=4. Fallback to 16×8 if absent. **Out-of-range x/y returns INVALID_ARGUMENT** — always clamp via worldSize-derived dims.
+- **Heading → tile-x math** (in `content.js:handlePanoInfo`):
+  ```
+  rel  = ((routeHeading - originHeading + 180) + 360) % 360   // +180° because tile x=0 looks "backward" from originHeading
+  T    = floor(rel / degPerXTile) % xTiles                    // tile containing the heading
+  frac = rel/degPerXTile - floor(rel/degPerXTile)             // [0, 1)
+  ```
+  Render tiles `T-1, T, T+1` (3 across) × `yTop, yBot` (the two rows flanking the panorama's pitch midpoint), then translate the inner div by `translateX(-200 * frac)` to put the heading at the horizontal center of the viewport. 6 tile fetches per render — 4 visible, 2 panning buffer.
+- **Source filter: `StreetViewSource.GOOGLE`.** Without it, `getPanorama` will happily return user-contributed photospheres (panorama type 10), whose panoids look like `CAoSFkNJSE0w...` (base64-wrapped protobuf with type byte 10). Type-10 panoramas are NOT served by `streetviewpixels-pa` — they live in a different content tier (ggpht.com / lh3.googleusercontent.com) — so their tile requests just 4xx. Filtering at lookup time means we either get a renderable Google panorama or a clean ZERO_RESULTS that routes into the existing no-coverage UI.
+- **`StreetViewService` resolution** (`page-bridge.js:getStreetViewLib`). RWGPS uses the new dynamic Maps JS loader, where `google.maps.StreetViewService` may NOT be on the global synchronously even when `google.maps` is. Try the legacy global first, then fall back to `await google.maps.importLibrary('streetView')`. Cache the resolved library object so subsequent `LOOKUP_PANO` requests are zero-cost. Note: the existing constructor hooks (`Map`, `Polyline`, `Marker`) still work because RWGPS pulls in those libraries before our content script gets a chance to ask for `StreetViewService`.
+- **Existing throttling levers still apply.** `bucketMeters` / `skipThresholdMeters` / `dwellMs` reduce panorama-lookup rate the same way they reduced Static API request rate. Browser caches both the metadata fetches and the tile fetches.
+- **Overlay layout** (`overlay.css`). The 3×2 `<img>` grid lives in `.sv-tiles`, a 600×400 inner box positioned `top: -75px; left: 0;` relative to the 400×250 overlay. Each tile is 200×200 in two rows of three. JS sets `translateX(-200 * frac)` for sub-tile horizontal centering. **Debug black borders are still on** — strip `border: 1px solid #000` on `.sv-tile` once the geometry is locked in for production.
+
+## Open follow-ups (free-tile pipeline)
+
+- **Strip debug tile borders** in `overlay.css`.
+- **Popup state machine isn't reshaped yet.** The FIRSTRUN screen still demands an API key when none is set. With the free-tile toggle defaulting to ON, that screen is technically irrelevant — but the toggle sits above it in the popup, so users can ignore the firstrun ask. Cleanup task: remove the FIRSTRUN demand path entirely once the free pipeline proves out.
+- **Cap UI / counter UI is still rendered** but sits at zero in free-tile mode. Static-API path still depends on it; only strip after deciding to retire that path.
+- **Heading granularity is still ±1 tile worth** at panorama level — for non-standard panoramas with fewer tiles per 360°, individual tiles cover MORE degrees, so visible bias may grow. Sub-tile shift compensates the residual within a tile, but at the *seam between two panoramas* with mismatched coverage there's no fix short of zoom=5 (16 tiles per render — too many requests).
 
 ## Build and release
 

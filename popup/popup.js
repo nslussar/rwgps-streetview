@@ -54,6 +54,8 @@ document.addEventListener('DOMContentLoaded', function () {
   var skipThresholdMetersInput = $('skipThresholdMeters');
   var dwellMsInput = $('dwellMs');
 
+  var useFreeTilePipelineInput = $('useFreeTilePipeline');
+
   var keyToggle = $('keyToggle');
   var keyField = $('keyField');
   var apiKeyInput = $('apiKey');
@@ -190,7 +192,7 @@ document.addEventListener('DOMContentLoaded', function () {
   chrome.storage.sync.get(
     ['apiKey', 'radius', 'apiCap', 'apiCapEnabled',
      'bucketMeters', 'skipThresholdMeters', 'dwellMs',
-     'popupAdvancedExpanded'],
+     'popupAdvancedExpanded', 'useFreeTilePipeline'],
     function (result) {
       state.apiKey = result.apiKey || '';
       apiKeyOnboardInput.value = state.apiKey;
@@ -204,9 +206,14 @@ document.addEventListener('DOMContentLoaded', function () {
       apiCapInput.value = state.cap;
       apiCapEnabledInput.checked = state.capEnabled;
       state.advancedExpanded = !!result.popupAdvancedExpanded;
+      useFreeTilePipelineInput.checked = result.useFreeTilePipeline !== false; // default true
       initialReadDone();
     }
   );
+
+  useFreeTilePipelineInput.addEventListener('change', function () {
+    chrome.storage.sync.set({ useFreeTilePipeline: useFreeTilePipelineInput.checked });
+  });
 
   chrome.storage.local.get(['apiUsage', 'apiKeyInvalid', 'rateLimitedAt'], function (result) {
     applyMonthly(result.apiUsage);

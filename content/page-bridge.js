@@ -38,6 +38,35 @@
     } catch (e) { /* ignore */ }
   }
 
+  // Resolve the streetView library object. Returns `{StreetViewService, StreetViewSource}`
+  // or null. Handles both legacy global and dynamic loader (importLibrary).
+  // We need StreetViewSource so we can filter out user-contributed photospheres
+  // (type 10), which `streetviewpixels-pa.googleapis.com/v1/tile` does not serve —
+  // their wrapped panoids would 4xx from the tile endpoint even though the
+  // metadata lookup succeeds.
+  var cachedSvLib = null;
+  function getStreetViewLib() {
+    if (cachedSvLib) return Promise.resolve(cachedSvLib);
+    if (!window.google || !window.google.maps) return Promise.resolve(null);
+    if (google.maps.StreetViewService) {
+      cachedSvLib = {
+        StreetViewService: google.maps.StreetViewService,
+        StreetViewSource: google.maps.StreetViewSource
+      };
+      return Promise.resolve(cachedSvLib);
+    }
+    if (typeof google.maps.importLibrary === 'function') {
+      return google.maps.importLibrary('streetView').then(function (lib) {
+        cachedSvLib = lib;
+        return lib;
+      }).catch(function (e) {
+        log('importLibrary("streetView") failed: ' + (e && e.message || e));
+        return null;
+      });
+    }
+    return Promise.resolve(null);
+  }
+
   // Throttle tracking updates to ~12/sec (every 80ms)
   let lastTrackingSend = 0;
   let pendingTrackingLatlng = null;
@@ -524,6 +553,69 @@
             requestId: msg.requestId
           }, '*');
         }
+        break;
+      }
+
+      case 'LOOKUP_PANO': {
+        var reqId = msg.requestId;
+        var radius = (msg.data && msg.data.radius) || 50;
+        getStreetViewLib().then(function (lib) {
+          if (!lib || !lib.StreetViewService) {
+            window.postMessage({
+              type: PREFIX + 'RESPONSE',
+              action: 'PANO_INFO',
+              data: { error: 'StreetViewService unavailable' },
+              requestId: reqId
+            }, '*');
+            return;
+          }
+          var svc = new lib.StreetViewService();
+          var opts = {
+            location: { lat: msg.data.lat, lng: msg.data.lng },
+            radius: radius
+          };
+          // Filter out user-contributed photospheres — the streetviewpixels-pa
+          // tile endpoint doesn't serve them, so we'd get a panoid we can't
+          // render. GOOGLE source = Google-captured SV only.
+          var sourceVal = (lib.StreetViewSource && lib.StreetViewSource.GOOGLE) || 'google';
+          opts.source = sourceVal;
+          svc.getPanorama(opts)
+            .then(function (res) {
+              var d = res && res.data;
+              if (!d || !d.location) {
+                window.postMessage({
+                  type: PREFIX + 'RESPONSE',
+                  action: 'PANO_INFO',
+                  data: { error: 'no data' },
+                  requestId: reqId
+                }, '*');
+                return;
+              }
+              var ws = d.tiles && d.tiles.worldSize;
+              window.postMessage({
+                type: PREFIX + 'RESPONSE',
+                action: 'PANO_INFO',
+                data: {
+                  panoid: d.location.pano,
+                  snappedLat: d.location.latLng.lat(),
+                  snappedLng: d.location.latLng.lng(),
+                  originHeading: d.tiles && d.tiles.originHeading,
+                  worldSize: ws ? { width: ws.width, height: ws.height } : null
+                },
+                requestId: reqId
+              }, '*');
+            })
+            .catch(function (e) {
+              var emsg = String(e && e.message || e);
+              var noCoverage = emsg.indexOf('ZERO_RESULTS') !== -1;
+              window.postMessage({
+                type: PREFIX + 'RESPONSE',
+                action: 'PANO_INFO',
+                data: { error: emsg, noCoverage: noCoverage },
+                requestId: reqId
+              }, '*');
+            });
+        });
         break;
       }
 
