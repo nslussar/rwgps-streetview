@@ -99,7 +99,7 @@ If neither applies (and not invalid-key), render the **"Active on this page"** p
 
 | Label | Unit | Default | Hint |
 |---|---|---|---|
-| Pano radius | m | 10 | How far Google searches around the point. |
+| Search radius | m | 10 | Max distance from the cursor to find a Street View panorama. |
 | Position rounding | m | 25 | Snap nearby positions to reuse cached images. |
 | Min cursor move | m | 25 | Distance threshold before refetching. |
 | Settle delay | ms | 100 | Wait for cursor to stop before fetching. |
