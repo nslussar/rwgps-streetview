@@ -44,6 +44,14 @@
   function worldDivisorForZoom(z) { return 512 * Math.pow(2, 5 - z); } // px per tile in worldSize space
   function defaultXTilesForZoom(z) { return 32 / Math.pow(2, 5 - z); } // standard SV-car horizontal grid
   function defaultYTilesForZoom(z) { return 16 / Math.pow(2, 5 - z); } // standard SV-car vertical grid
+  // Free-tile pipeline tunables exposed in the popup. Viewport size and
+  // per-tile pixel size trade FOV against detail (smaller tiles = more
+  // panorama visible per viewport pixel); horizon nudge layers a fixed
+  // pixel offset on top of the auto seam-row centering.
+  const DEFAULT_VIEWPORT_W = 400;
+  const DEFAULT_VIEWPORT_H = 250;
+  const DEFAULT_TILE_PX = 200;
+  const DEFAULT_HORIZON_NUDGE_PX = 0;
   let apiKey = '';
   let enabled = true;
   let useFreeTilePipeline = true;
@@ -51,6 +59,14 @@
   let bucketMeters = DEFAULT_BUCKET_METERS;
   let skipThresholdMeters = DEFAULT_SKIP_THRESHOLD_METERS;
   let dwellMs = DEFAULT_DWELL_MS;
+  let viewportW = DEFAULT_VIEWPORT_W;
+  let viewportH = DEFAULT_VIEWPORT_H;
+  let tilePx = DEFAULT_TILE_PX;
+  let horizonNudgePx = DEFAULT_HORIZON_NUDGE_PX;
+  // Cached values from the most recent free-tile render so we can re-apply
+  // the inner-div transform when only a tunable knob changes (no new pano).
+  let lastFrac = null;
+  let lastSeamWorldOffset = 0;
   let dwellTimer = null;
   let pendingDwellArgs = null;
   let keyValid = null; // null = untested, true = valid, false = invalid
@@ -103,7 +119,7 @@
 
   function init() {
     RwgpsApiBudget.init();
-    chrome.storage.sync.get(['apiKey', 'enabled', 'useFreeTilePipeline', 'radius', 'bucketMeters', 'skipThresholdMeters', 'dwellMs'], function (result) {
+    chrome.storage.sync.get(['apiKey', 'enabled', 'useFreeTilePipeline', 'radius', 'bucketMeters', 'skipThresholdMeters', 'dwellMs', 'viewportW', 'viewportH', 'tilePx', 'horizonNudgePx'], function (result) {
       apiKey = result.apiKey || '';
       enabled = result.enabled !== false;
       useFreeTilePipeline = result.useFreeTilePipeline !== false; // default true
@@ -111,6 +127,10 @@
       bucketMeters = numOr(result.bucketMeters, DEFAULT_BUCKET_METERS);
       skipThresholdMeters = numOr(result.skipThresholdMeters, DEFAULT_SKIP_THRESHOLD_METERS);
       dwellMs = numOr(result.dwellMs, DEFAULT_DWELL_MS);
+      viewportW = numOr(result.viewportW, DEFAULT_VIEWPORT_W);
+      viewportH = numOr(result.viewportH, DEFAULT_VIEWPORT_H);
+      tilePx = numOr(result.tilePx, DEFAULT_TILE_PX);
+      horizonNudgePx = numOrSigned(result.horizonNudgePx, DEFAULT_HORIZON_NUDGE_PX);
 
       if (!apiKey && !useFreeTilePipeline) {
         console.log('[RWGPS Street View] No API key configured and free-tile pipeline disabled. Idle.');
@@ -170,6 +190,23 @@
       if (changes.dwellMs) {
         dwellMs = numOr(changes.dwellMs.newValue, DEFAULT_DWELL_MS);
       }
+      if (changes.viewportW) {
+        viewportW = numOr(changes.viewportW.newValue, DEFAULT_VIEWPORT_W);
+        applyOverlayCssVars();
+      }
+      if (changes.viewportH) {
+        viewportH = numOr(changes.viewportH.newValue, DEFAULT_VIEWPORT_H);
+        applyOverlayCssVars();
+      }
+      if (changes.tilePx) {
+        tilePx = numOr(changes.tilePx.newValue, DEFAULT_TILE_PX);
+        applyOverlayCssVars();
+        applyTilesTransform();
+      }
+      if (changes.horizonNudgePx) {
+        horizonNudgePx = numOrSigned(changes.horizonNudgePx.newValue, DEFAULT_HORIZON_NUDGE_PX);
+        applyTilesTransform();
+      }
     });
   }
 
@@ -179,6 +216,29 @@
 
   function numOr(v, fallback) {
     return (typeof v === 'number' && v >= 0) ? v : fallback;
+  }
+
+  // Signed variant for tunables that accept negative values (e.g. horizon nudge).
+  function numOrSigned(v, fallback) {
+    return (typeof v === 'number' && isFinite(v)) ? v : fallback;
+  }
+
+  function applyOverlayCssVars() {
+    if (!overlayEl) return;
+    overlayEl.style.setProperty('--sv-vp-w', viewportW + 'px');
+    overlayEl.style.setProperty('--sv-vp-h', viewportH + 'px');
+    overlayEl.style.setProperty('--sv-tile-px', tilePx + 'px');
+  }
+
+  // Re-apply the inner-tile-div transform from the most recent free-tile
+  // render. Used when a tunable knob changes (tilePx / horizonNudgePx) so
+  // the heading and horizon stay centered without waiting for a new pano.
+  function applyTilesTransform() {
+    if (!overlayTilesEl || lastFrac == null) return;
+    var horizonOffsetPx = lastSeamWorldOffset * tilePx;
+    overlayTilesEl.style.transform =
+      'translateX(' + (-tilePx * lastFrac) + 'px) ' +
+      'translateY(' + (-(horizonOffsetPx + horizonNudgePx)) + 'px)';
   }
 
   // Skip-threshold floor lifted to whichever is bigger: the user-set value
@@ -284,6 +344,7 @@
     overlayEl.appendChild(headingLabelEl);
     overlayEl.appendChild(headingArrowEl);
     document.body.appendChild(overlayEl);
+    applyOverlayCssVars();
   }
 
   // --- Bridge Communication ---
@@ -844,8 +905,11 @@
     var yTop = seamRow - 1;
     var yBot = seamRow;
     // Inner-div pixels horizon sits below the seam (negative = above seam).
-    // Each tile renders at 200 px; spans `divisor` worldsize px.
-    var horizonOffsetPx = ((horizonWorldY - seamRow * divisor) / divisor) * 200;
+    // Each tile renders at tilePx; spans `divisor` worldsize px. Cache the
+    // worldsize-fraction offset so applyTilesTransform() can recompute the
+    // pixel shift if tilePx or horizonNudgePx change after this render.
+    var seamWorldOffset = (horizonWorldY - seamRow * divisor) / divisor;
+    var horizonOffsetPx = seamWorldOffset * tilePx;
     console.log('[RWGPS Street View] pano',
       data.panoid,
       'worldSize=' + (data.worldSize ? data.worldSize.width + 'x' + data.worldSize.height : 'null'),
@@ -892,9 +956,10 @@
           // Sub-tile horizontal shift so the heading lands at viewport center,
           // plus vertical shift so horizon lands at viewport center (compensates
           // for non-integer yTiles where the chosen seam isn't exactly at horizon).
-          overlayTilesEl.style.transform =
-            'translateX(' + (-200 * frac) + 'px) ' +
-            'translateY(' + (-horizonOffsetPx) + 'px)';
+          // Cache for re-application when tunable knobs change.
+          lastFrac = frac;
+          lastSeamWorldOffset = seamWorldOffset;
+          applyTilesTransform();
           for (var j = 0; j < 6; j++) overlayTiles[j].src = urls[j];
           overlayImg.style.display = 'none';
           overlayTilesEl.style.display = 'block';
@@ -933,8 +998,8 @@
   }
 
   function positionOverlay() {
-    var ow = 404; // 400 + 2*2 border
-    var oh = 254;
+    var ow = viewportW + 4; // viewport + 2*2 border
+    var oh = viewportH + 4;
     var gap = 20;
 
     var vw = window.innerWidth;

@@ -1,8 +1,11 @@
+/* Viewport (--sv-vp-w/h) and per-tile size (--sv-tile-px) are CSS vars set by
+   content.js from chrome.storage.sync. Defaults below match the original
+   400×250 / 200px-tile geometry. */
 #rwgps-sv-overlay {
   position: fixed;
   z-index: 10000;
-  width: 400px;
-  height: 250px;
+  width: var(--sv-vp-w, 400px);
+  height: var(--sv-vp-h, 250px);
   border-radius: 8px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
   overflow: hidden;
@@ -21,36 +24,34 @@
   display: block;
 }
 
-/* Free-tile path: 3x2 grid of 512×512 tiles assembled into a 1536×1024
-   logical panorama, displayed at 600×400 (cover-fit by width to 400 viewport).
-   The inner box is positioned with top:-75 to crop top/bottom for horizon
-   centering. JS applies a translateX based on the heading's sub-tile offset
-   so the route heading always lands at the horizontal center of the viewport.
-   Hardcoded to overlay's 400×250 dimensions. */
+/* Free-tile path: 3×2 grid of 512×512 tiles displayed at --sv-tile-px each.
+   Inner box is anchored so its center sits at the viewport center; JS applies
+   translateX/Y to nudge the route heading to viewport-center horizontally and
+   the panorama horizon to viewport-center vertically. */
 #rwgps-sv-overlay .sv-tiles {
   position: absolute;
-  top: -75px;
-  left: 0;
-  width: 600px;
-  height: 400px;
+  top: calc(var(--sv-vp-h, 250px) / 2 - var(--sv-tile-px, 200px));
+  left: calc(var(--sv-vp-w, 400px) / 2 - var(--sv-tile-px, 200px));
+  width: calc(3 * var(--sv-tile-px, 200px));
+  height: calc(2 * var(--sv-tile-px, 200px));
   display: none;
 }
 #rwgps-sv-overlay .sv-tile {
   position: absolute;
-  width: 200px;
-  height: 200px;
+  width: var(--sv-tile-px, 200px);
+  height: var(--sv-tile-px, 200px);
   display: block;
-  /* Debug: black border so tile seams are visible. box-sizing keeps the 200×200
-     footprint so layout doesn't shift. Remove once happy. */
+  /* Debug: black border so tile seams are visible. box-sizing keeps the
+     tile-px footprint so layout doesn't shift. Remove once happy. */
   box-sizing: border-box;
   border: 1px solid #000;
 }
-#rwgps-sv-overlay .sv-tile-tl { top: 0;     left: 0; }
-#rwgps-sv-overlay .sv-tile-tm { top: 0;     left: 200px; }
-#rwgps-sv-overlay .sv-tile-tr { top: 0;     left: 400px; }
-#rwgps-sv-overlay .sv-tile-bl { top: 200px; left: 0; }
-#rwgps-sv-overlay .sv-tile-bm { top: 200px; left: 200px; }
-#rwgps-sv-overlay .sv-tile-br { top: 200px; left: 400px; }
+#rwgps-sv-overlay .sv-tile-tl { top: 0;                            left: 0; }
+#rwgps-sv-overlay .sv-tile-tm { top: 0;                            left: var(--sv-tile-px, 200px); }
+#rwgps-sv-overlay .sv-tile-tr { top: 0;                            left: calc(2 * var(--sv-tile-px, 200px)); }
+#rwgps-sv-overlay .sv-tile-bl { top: var(--sv-tile-px, 200px);     left: 0; }
+#rwgps-sv-overlay .sv-tile-bm { top: var(--sv-tile-px, 200px);     left: var(--sv-tile-px, 200px); }
+#rwgps-sv-overlay .sv-tile-br { top: var(--sv-tile-px, 200px);     left: calc(2 * var(--sv-tile-px, 200px)); }
 
 #rwgps-sv-overlay .sv-street-label {
   position: absolute;

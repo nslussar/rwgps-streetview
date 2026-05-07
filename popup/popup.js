@@ -2,6 +2,10 @@ var DEFAULT_RADIUS = 10;
 var DEFAULT_BUCKET_METERS = 10;
 var DEFAULT_SKIP_THRESHOLD_METERS = 10;
 var DEFAULT_DWELL_MS = 200;
+var DEFAULT_VIEWPORT_W = 400;
+var DEFAULT_VIEWPORT_H = 250;
+var DEFAULT_TILE_PX = 200;
+var DEFAULT_HORIZON_NUDGE_PX = 0;
 var RATE_LIMIT_WINDOW_MS = 60 * 1000;
 
 var STATE = {
@@ -55,6 +59,10 @@ document.addEventListener('DOMContentLoaded', function () {
   var dwellMsInput = $('dwellMs');
 
   var useFreeTilePipelineInput = $('useFreeTilePipeline');
+  var viewportWInput = $('viewportW');
+  var viewportHInput = $('viewportH');
+  var tilePxInput = $('tilePx');
+  var horizonNudgePxInput = $('horizonNudgePx');
 
   var keyToggle = $('keyToggle');
   var keyField = $('keyField');
@@ -85,6 +93,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function fmt(n) { return Number(n || 0).toLocaleString(); }
   function numOr(v, fallback) { return (typeof v === 'number' && v >= 0) ? v : fallback; }
+  function numOrSigned(v, fallback) { return (typeof v === 'number' && isFinite(v)) ? v : fallback; }
 
   function currentMonthLabel() {
     return new Date().toLocaleString(undefined, { month: 'long', year: 'numeric' });
@@ -192,7 +201,8 @@ document.addEventListener('DOMContentLoaded', function () {
   chrome.storage.sync.get(
     ['apiKey', 'radius', 'apiCap', 'apiCapEnabled',
      'bucketMeters', 'skipThresholdMeters', 'dwellMs',
-     'popupAdvancedExpanded', 'useFreeTilePipeline'],
+     'popupAdvancedExpanded', 'useFreeTilePipeline',
+     'viewportW', 'viewportH', 'tilePx', 'horizonNudgePx'],
     function (result) {
       state.apiKey = result.apiKey || '';
       apiKeyOnboardInput.value = state.apiKey;
@@ -207,6 +217,10 @@ document.addEventListener('DOMContentLoaded', function () {
       apiCapEnabledInput.checked = state.capEnabled;
       state.advancedExpanded = !!result.popupAdvancedExpanded;
       useFreeTilePipelineInput.checked = result.useFreeTilePipeline !== false; // default true
+      viewportWInput.value = numOr(result.viewportW, DEFAULT_VIEWPORT_W);
+      viewportHInput.value = numOr(result.viewportH, DEFAULT_VIEWPORT_H);
+      tilePxInput.value = numOr(result.tilePx, DEFAULT_TILE_PX);
+      horizonNudgePxInput.value = numOrSigned(result.horizonNudgePx, DEFAULT_HORIZON_NUDGE_PX);
       initialReadDone();
     }
   );
@@ -343,6 +357,20 @@ document.addEventListener('DOMContentLoaded', function () {
   bindNumberSave(bucketMetersInput, 'bucketMeters', function (v) { return v >= 0 && v <= 100; });
   bindNumberSave(skipThresholdMetersInput, 'skipThresholdMeters', function (v) { return v >= 0 && v <= 200; });
   bindNumberSave(dwellMsInput, 'dwellMs', function (v) { return v >= 0 && v <= 1000; });
+  bindNumberSave(viewportWInput, 'viewportW', function (v) { return v >= 200 && v <= 900; });
+  bindNumberSave(viewportHInput, 'viewportH', function (v) { return v >= 150 && v <= 600; });
+  bindNumberSave(tilePxInput, 'tilePx', function (v) { return v >= 80 && v <= 800; });
+  bindNumberSave(horizonNudgePxInput, 'horizonNudgePx', function (v) { return v >= -150 && v <= 150; });
+
+  // Reset buttons next to each tunable: drop the storage key so content.js
+  // and the popup both fall back to their defaults. The storage.onChanged
+  // listener below mirrors the new value into the input.
+  document.querySelectorAll('[data-reset]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var key = btn.getAttribute('data-reset');
+      if (key) chrome.storage.sync.remove(key);
+    });
+  });
 
   // Mirror an external storage change into a focused-aware input.
   function syncInputValue(input, value) {
@@ -372,6 +400,10 @@ document.addEventListener('DOMContentLoaded', function () {
       if (changes.skipThresholdMeters) syncInputValue(skipThresholdMetersInput, numOr(changes.skipThresholdMeters.newValue, DEFAULT_SKIP_THRESHOLD_METERS));
       if (changes.dwellMs) syncInputValue(dwellMsInput, numOr(changes.dwellMs.newValue, DEFAULT_DWELL_MS));
       if (changes.radius) syncInputValue(radiusInput, changes.radius.newValue || DEFAULT_RADIUS);
+      if (changes.viewportW) syncInputValue(viewportWInput, numOr(changes.viewportW.newValue, DEFAULT_VIEWPORT_W));
+      if (changes.viewportH) syncInputValue(viewportHInput, numOr(changes.viewportH.newValue, DEFAULT_VIEWPORT_H));
+      if (changes.tilePx) syncInputValue(tilePxInput, numOr(changes.tilePx.newValue, DEFAULT_TILE_PX));
+      if (changes.horizonNudgePx) syncInputValue(horizonNudgePxInput, numOrSigned(changes.horizonNudgePx.newValue, DEFAULT_HORIZON_NUDGE_PX));
     }
     if (area === 'local') {
       if (changes.apiUsage) { applyMonthly(changes.apiUsage.newValue); changed = true; }

@@ -25,6 +25,32 @@
     <label for="useFreeTilePipeline" style="cursor:pointer">Use free tile pipeline (no API key needed)</label>
   </div>
 
+  <!-- Free-tile pipeline tunables. Functional, not styled.
+       Reset buttons (data-reset="<key>") delete the storage.sync key so
+       content.js falls back to its default. -->
+  <div style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:12px;display:grid;grid-template-columns:1fr 1fr;gap:6px 12px">
+    <label style="display:flex;align-items:center;gap:6px">
+      <span style="flex:1">Viewport width</span>
+      <input type="number" id="viewportW" min="200" max="900" step="10" style="width:56px">
+      <button type="button" data-reset="viewportW" title="Reset to default" aria-label="Reset viewport width" style="border:0;background:transparent;cursor:pointer;padding:0 2px;font-size:14px;color:#888;line-height:1">↺</button>
+    </label>
+    <label style="display:flex;align-items:center;gap:6px">
+      <span style="flex:1">Viewport height</span>
+      <input type="number" id="viewportH" min="150" max="600" step="10" style="width:56px">
+      <button type="button" data-reset="viewportH" title="Reset to default" aria-label="Reset viewport height" style="border:0;background:transparent;cursor:pointer;padding:0 2px;font-size:14px;color:#888;line-height:1">↺</button>
+    </label>
+    <label style="display:flex;align-items:center;gap:6px">
+      <span style="flex:1">Tile size (px)</span>
+      <input type="number" id="tilePx" min="80" max="800" step="10" style="width:56px">
+      <button type="button" data-reset="tilePx" title="Reset to default" aria-label="Reset tile size" style="border:0;background:transparent;cursor:pointer;padding:0 2px;font-size:14px;color:#888;line-height:1">↺</button>
+    </label>
+    <label style="display:flex;align-items:center;gap:6px">
+      <span style="flex:1">Horizon nudge (px)</span>
+      <input type="number" id="horizonNudgePx" min="-150" max="150" step="2" style="width:56px">
+      <button type="button" data-reset="horizonNudgePx" title="Reset to default" aria-label="Reset horizon nudge" style="border:0;background:transparent;cursor:pointer;padding:0 2px;font-size:14px;color:#888;line-height:1">↺</button>
+    </label>
+  </div>
+
   <!-- FIRST RUN -->
   <section class="body body-firstrun" hidden>
     <div class="onboarding-card">
