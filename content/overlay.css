@@ -84,6 +84,37 @@
   display: none;
 }
 
+#rwgps-sv-overlay .sv-hint-label {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 10px;
+  background: #222;
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 0 0 6px 6px;
+  white-space: nowrap;
+}
+
+#rwgps-sv-overlay .sv-hint-label kbd {
+  display: inline-block;
+  padding: 0 4px;
+  margin-right: 2px;
+  border: 1px solid #888;
+  border-radius: 2px;
+  background: #333;
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 12px;
+  text-transform: lowercase;
+  vertical-align: 1px;
+}
+
 #rwgps-sv-overlay .sv-heading-arrow {
   position: absolute;
   top: 8px;

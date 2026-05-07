@@ -81,6 +81,7 @@
   let streetLabelEl = null;
   let headingLabelEl = null;
   let headingArrowEl = null;
+  let hintLabelEl = null;
   let loadingEl = null;
   let lastGeocodedPoint = null;
   let geocodeCounter = 0;
@@ -336,12 +337,20 @@
     arrowImg.height = 18;
     headingArrowEl.appendChild(arrowImg);
 
+    hintLabelEl = document.createElement('div');
+    hintLabelEl.className = 'sv-hint-label';
+    var hintKbd = document.createElement('kbd');
+    hintKbd.textContent = 'v';
+    hintLabelEl.appendChild(hintKbd);
+    hintLabelEl.appendChild(document.createTextNode(' for full street view'));
+
     overlayEl.appendChild(overlayImg);
     overlayEl.appendChild(overlayTilesEl);
     overlayEl.appendChild(loadingEl);
     overlayEl.appendChild(noCoverageEl);
     overlayEl.appendChild(streetLabelEl);
     overlayEl.appendChild(headingLabelEl);
+    overlayEl.appendChild(hintLabelEl);
     overlayEl.appendChild(headingArrowEl);
     document.body.appendChild(overlayEl);
     applyOverlayCssVars();
@@ -491,12 +500,20 @@
     });
 
     // Click on overlay opens Google Maps Street View in a new tab
-    overlayEl.addEventListener('click', function () {
+    // (also bound to the `v` key — see document keydown below — because the
+    // overlay tracks the cursor, making it nearly impossible to actually
+    // mouse over and click).
+    overlayEl.addEventListener('click', openStreetViewTab);
+
+    document.addEventListener('keydown', function (event) {
+      if (event.key !== 'v' && event.key !== 'V') return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (!overlayEl || overlayEl.style.display === 'none') return;
       if (!lastShownPoint) return;
-      var url = 'https://www.google.com/maps/@'
-        + lastShownPoint.lat.toFixed(6) + ',' + lastShownPoint.lng.toFixed(6)
-        + ',3a,75y,0h,90t/data=!3m4!1e1!3m2!1s!2e0';
-      window.open(url, '_blank');
+      var t = event.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      event.preventDefault();
+      openStreetViewTab();
     });
 
     overlayEl.addEventListener('mouseenter', cancelLingerTimer);
@@ -1023,6 +1040,15 @@
 
   function showOverlay() {
     overlayEl.style.display = 'block';
+  }
+
+  function openStreetViewTab() {
+    if (!lastShownPoint) return;
+    var h = lastDisplayedHeading != null ? ((lastDisplayedHeading % 360) + 360) % 360 : 0;
+    var url = 'https://www.google.com/maps/@'
+      + lastShownPoint.lat.toFixed(6) + ',' + lastShownPoint.lng.toFixed(6)
+      + ',3a,75y,' + h + 'h,90t/data=!3m4!1e1!3m2!1s!2e0';
+    window.open(url, '_blank');
   }
 
   function hideOverlay() {
