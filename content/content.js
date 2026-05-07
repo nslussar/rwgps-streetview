@@ -54,6 +54,16 @@
   const DEFAULT_HORIZON_NUDGE_PX = 0;
   let apiKey = '';
   let enabled = true;
+  // 'editor' for /routes/new and /routes/{id}/edit; otherwise 'viewer'. Used
+  // to drive the preview-on-page-load default: editor starts OFF every load
+  // (in-memory only, no storage), viewer remembers via previewEnabledViewer.
+  const mode = (function () {
+    var p = window.location.pathname;
+    if (/^\/routes\/new\b/.test(p)) return 'editor';
+    if (/^\/routes\/\d+\/edit\b/.test(p)) return 'editor';
+    return 'viewer';
+  })();
+  let previewEnabled = false; // set in init() based on mode + storage
   let useFreeTilePipeline = true;
   let radius = DEFAULT_RADIUS;
   let bucketMeters = DEFAULT_BUCKET_METERS;
@@ -120,9 +130,12 @@
 
   function init() {
     RwgpsApiBudget.init();
-    chrome.storage.sync.get(['apiKey', 'enabled', 'useFreeTilePipeline', 'radius', 'bucketMeters', 'skipThresholdMeters', 'dwellMs', 'viewportW', 'viewportH', 'tilePx', 'horizonNudgePx'], function (result) {
+    chrome.storage.sync.get(['apiKey', 'enabled', 'useFreeTilePipeline', 'radius', 'bucketMeters', 'skipThresholdMeters', 'dwellMs', 'viewportW', 'viewportH', 'tilePx', 'horizonNudgePx', 'previewEnabledViewer'], function (result) {
       apiKey = result.apiKey || '';
       enabled = result.enabled !== false;
+      previewEnabled = mode === 'viewer'
+        ? result.previewEnabledViewer !== false  // viewer default: ON
+        : false;                                 // editor: always OFF on load
       useFreeTilePipeline = result.useFreeTilePipeline !== false; // default true
       radius = result.radius || DEFAULT_RADIUS;
       bucketMeters = numOr(result.bucketMeters, DEFAULT_BUCKET_METERS);
@@ -143,6 +156,7 @@
       if (apiKey && !useFreeTilePipeline) validateApiKey();
       injectBridge();
       createOverlay();
+      registerKeyboardShortcuts();
       listenForBridgeMessages();
       waitForMap();
     });
@@ -159,6 +173,7 @@
           console.log('[RWGPS Street View] API key set, running late initialization');
           injectBridge();
           createOverlay();
+          registerKeyboardShortcuts();
           listenForBridgeMessages();
           waitForMap();
         }
@@ -171,6 +186,7 @@
           console.log('[RWGPS Street View] Free-tile pipeline enabled, running late initialization');
           injectBridge();
           createOverlay();
+          registerKeyboardShortcuts();
           listenForBridgeMessages();
           waitForMap();
         }
@@ -178,6 +194,12 @@
       if (changes.enabled) {
         enabled = changes.enabled.newValue !== false;
         if (!enabled) hideOverlay();
+      }
+      // Editor mode ignores cross-tab sync (its default is always OFF on load
+      // and any toggle is in-memory). Viewer mode mirrors storage.
+      if (changes.previewEnabledViewer && mode === 'viewer') {
+        previewEnabled = changes.previewEnabledViewer.newValue !== false;
+        if (!previewEnabled) hideOverlay();
       }
       if (changes.radius) {
         radius = changes.radius.newValue || DEFAULT_RADIUS;
@@ -209,10 +231,63 @@
         applyTilesTransform();
       }
     });
+
+    // Popup ↔ content-script bridge for the preview-toggle button. Editor-mode
+    // state lives only here, so the popup must round-trip through us instead
+    // of reading storage directly.
+    chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
+      if (!request || typeof request.type !== 'string') return;
+      if (request.type === 'GET_PREVIEW_STATE') {
+        sendResponse({ mode: mode, enabled: previewEnabled });
+      } else if (request.type === 'SET_PREVIEW_STATE') {
+        setPreviewEnabled(!!request.enabled);
+        sendResponse({ ok: true, mode: mode, enabled: previewEnabled });
+      }
+    });
   }
 
   function isOperational() {
-    return enabled && (apiKey || useFreeTilePipeline);
+    return enabled && previewEnabled && (apiKey || useFreeTilePipeline);
+  }
+
+  function setPreviewEnabled(value) {
+    var next = !!value;
+    if (previewEnabled === next) return;
+    previewEnabled = next;
+    if (mode === 'viewer') {
+      chrome.storage.sync.set({ previewEnabledViewer: previewEnabled });
+    }
+    if (!previewEnabled) {
+      hideOverlay();
+      // Reset tracking state so re-enabling treats the next signal as fresh.
+      // Without clearing trackingActive the LATLNG-listener path drops manual
+      // responses (`if (!trackingActive)` short-circuits them), and a stale
+      // lastActiveMode='tracking' suppresses manual mode at low zoom.
+      lastActiveMode = null;
+      trackingActive = false;
+      clearTimeout(trackingDeactivateTimer);
+      trackingDeactivateTimer = null;
+      pendingLatLng = null;
+    } else {
+      // If cursor is already over the route, kick a lookup so the preview
+      // appears immediately — no mouse-wiggle needed.
+      tryShowAtCursor();
+    }
+  }
+
+  function tryShowAtCursor() {
+    if (!isOperational() || !mapContainer || flatCoords.length < 2) return;
+    var rect = getMapRect();
+    if (cursorX < rect.left || cursorX > rect.right ||
+        cursorY < rect.top || cursorY > rect.bottom) return;
+    var id = ++requestIdCounter;
+    pendingLatLng = id;
+    window.postMessage({
+      type: PREFIX + 'REQUEST',
+      action: 'PIXEL_TO_LATLNG',
+      data: { x: cursorX - rect.left, y: cursorY - rect.top },
+      requestId: id
+    }, '*');
   }
 
   function numOr(v, fallback) {
@@ -339,10 +414,14 @@
 
     hintLabelEl = document.createElement('div');
     hintLabelEl.className = 'sv-hint-label';
-    var hintKbd = document.createElement('kbd');
-    hintKbd.textContent = 'v';
-    hintLabelEl.appendChild(hintKbd);
-    hintLabelEl.appendChild(document.createTextNode(' for full street view'));
+    var hintKbdV = document.createElement('kbd');
+    hintKbdV.textContent = 'v';
+    hintLabelEl.appendChild(hintKbdV);
+    hintLabelEl.appendChild(document.createTextNode(' open tab  ·  '));
+    var hintKbdS = document.createElement('kbd');
+    hintKbdS.textContent = 's';
+    hintLabelEl.appendChild(hintKbdS);
+    hintLabelEl.appendChild(document.createTextNode(' to disable'));
 
     overlayEl.appendChild(overlayImg);
     overlayEl.appendChild(overlayTilesEl);
@@ -468,6 +547,38 @@
     }
   }
 
+  // Keyboard shortcuts register at init (before the bridge is ready) so
+  // toggling preview / opening Street View works on a fresh editor-mode load
+  // even if the user never moves the mouse first. Idempotent — late-init
+  // paths in init() also call this, so guard against double-registration.
+  var keyboardShortcutsRegistered = false;
+  function registerKeyboardShortcuts() {
+    if (keyboardShortcutsRegistered) return;
+    keyboardShortcutsRegistered = true;
+
+    document.addEventListener('keydown', function (event) {
+      if (event.key !== 'v' && event.key !== 'V') return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (!overlayEl || overlayEl.style.display === 'none') return;
+      if (!lastShownPoint) return;
+      var t = event.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      event.preventDefault();
+      openStreetViewTab();
+    });
+
+    // `s` toggles preview on/off. Works whether or not the overlay is
+    // visible (so the user can re-enable from a cold editor-mode page).
+    document.addEventListener('keydown', function (event) {
+      if (event.key !== 's' && event.key !== 'S') return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      var t = event.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      event.preventDefault();
+      setPreviewEnabled(!previewEnabled);
+    });
+  }
+
   function attachMouseListeners() {
     if (mapContainer) return; // already attached
 
@@ -500,21 +611,10 @@
     });
 
     // Click on overlay opens Google Maps Street View in a new tab
-    // (also bound to the `v` key — see document keydown below — because the
+    // (also bound to the `v` key in registerKeyboardShortcuts — because the
     // overlay tracks the cursor, making it nearly impossible to actually
     // mouse over and click).
     overlayEl.addEventListener('click', openStreetViewTab);
-
-    document.addEventListener('keydown', function (event) {
-      if (event.key !== 'v' && event.key !== 'V') return;
-      if (event.ctrlKey || event.metaKey || event.altKey) return;
-      if (!overlayEl || overlayEl.style.display === 'none') return;
-      if (!lastShownPoint) return;
-      var t = event.target;
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-      event.preventDefault();
-      openStreetViewTab();
-    });
 
     overlayEl.addEventListener('mouseenter', cancelLingerTimer);
 
@@ -530,12 +630,13 @@
   }
 
   function onMouseMove(event) {
-    if (!isOperational()) return;
-
+    // Track cursor even when preview is disabled — so when the user toggles
+    // back on, tryShowAtCursor() has a real position to work from.
     var prevX = cursorX;
     var prevY = cursorY;
     cursorX = event.clientX;
     cursorY = event.clientY;
+    if (!isOperational()) return;
     schedulePositionOverlay();
 
     // Deactivate tracking when RWGPS stops sending position updates.
@@ -618,6 +719,7 @@
   // --- Manual Mode (fallback) ---
 
   function handleManualLatLng(latlng, requestId, zoom) {
+    if (!isOperational()) return;
     if (requestId !== pendingLatLng) return;
     pendingLatLng = null;
 

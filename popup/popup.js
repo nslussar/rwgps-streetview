@@ -58,6 +58,10 @@ document.addEventListener('DOMContentLoaded', function () {
   var skipThresholdMetersInput = $('skipThresholdMeters');
   var dwellMsInput = $('dwellMs');
 
+  var previewToggleBtn = $('previewToggle');
+  var previewToggleLabelEl = $('previewToggleLabel');
+  var previewMode = null; // 'editor' | 'viewer' | null (no content script — popup writes storage directly)
+
   var useFreeTilePipelineInput = $('useFreeTilePipeline');
   var viewportWInput = $('viewportW');
   var viewportHInput = $('viewportH');
@@ -228,6 +232,82 @@ document.addEventListener('DOMContentLoaded', function () {
   useFreeTilePipelineInput.addEventListener('change', function () {
     chrome.storage.sync.set({ useFreeTilePipeline: useFreeTilePipelineInput.checked });
   });
+
+  // ---- Preview on/off toggle ----
+  // The toggle has two paths: when the popup is opened on an RWGPS tab the
+  // content script owns the live state (round-trip via runtime messages);
+  // otherwise we fall back to writing previewEnabledViewer directly so the
+  // button still controls the persisted default.
+  function renderPreviewToggle(enabled) {
+    previewToggleBtn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+    previewToggleLabelEl.textContent = enabled
+      ? 'Disable Street View preview'
+      : 'Enable Street View preview';
+  }
+
+  function withActiveTab(cb) {
+    chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+      var tabId = tabs[0] && tabs[0].id;
+      cb(tabId != null ? tabId : null);
+    });
+  }
+
+  function fetchPreviewState() {
+    withActiveTab(function (tabId) {
+      if (tabId == null) { renderPreviewFromStorage(); return; }
+      chrome.tabs.sendMessage(tabId, { type: 'GET_PREVIEW_STATE' }, function (response) {
+        if (chrome.runtime.lastError || !response) {
+          renderPreviewFromStorage();
+          return;
+        }
+        previewMode = response.mode || null;
+        renderPreviewToggle(!!response.enabled);
+      });
+    });
+  }
+
+  function renderPreviewFromStorage() {
+    previewMode = null;
+    chrome.storage.sync.get(['previewEnabledViewer'], function (result) {
+      renderPreviewToggle(result.previewEnabledViewer !== false);
+    });
+  }
+
+  previewToggleBtn.addEventListener('click', function () {
+    var current = previewToggleBtn.getAttribute('aria-pressed') === 'true';
+    var next = !current;
+    renderPreviewToggle(next); // optimistic
+    withActiveTab(function (tabId) {
+      if (tabId == null) {
+        chrome.storage.sync.set({ previewEnabledViewer: next });
+        return;
+      }
+      chrome.tabs.sendMessage(tabId, { type: 'SET_PREVIEW_STATE', enabled: next }, function (response) {
+        if (chrome.runtime.lastError || !response) {
+          // No content script on this tab — write storage directly.
+          chrome.storage.sync.set({ previewEnabledViewer: next });
+          previewMode = null;
+          return;
+        }
+        previewMode = response.mode || previewMode;
+        renderPreviewToggle(!!response.enabled);
+      });
+    });
+  });
+
+  // Mirror the page's `s` shortcut inside the popup — when the popup is open
+  // the page doesn't receive key events, so we wire it up here too.
+  document.addEventListener('keydown', function (event) {
+    if (event.key !== 's' && event.key !== 'S') return;
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    var t = event.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    if (previewToggleBtn.disabled) return;
+    event.preventDefault();
+    previewToggleBtn.click();
+  });
+
+  fetchPreviewState();
 
   chrome.storage.local.get(['apiUsage', 'apiKeyInvalid', 'rateLimitedAt'], function (result) {
     applyMonthly(result.apiUsage);
@@ -404,6 +484,13 @@ document.addEventListener('DOMContentLoaded', function () {
       if (changes.viewportH) syncInputValue(viewportHInput, numOr(changes.viewportH.newValue, DEFAULT_VIEWPORT_H));
       if (changes.tilePx) syncInputValue(tilePxInput, numOr(changes.tilePx.newValue, DEFAULT_TILE_PX));
       if (changes.horizonNudgePx) syncInputValue(horizonNudgePxInput, numOrSigned(changes.horizonNudgePx.newValue, DEFAULT_HORIZON_NUDGE_PX));
+      // Mirror viewer-mode preview toggles. Editor-mode state lives only in
+      // the content script's memory so there's no storage event to listen for.
+      // Mirror viewer-mode and storage-fallback states. Editor-mode is the
+      // only context where the popup's truth source isn't this storage key.
+      if (changes.previewEnabledViewer && previewMode !== 'editor') {
+        renderPreviewToggle(changes.previewEnabledViewer.newValue !== false);
+      }
     }
     if (area === 'local') {
       if (changes.apiUsage) { applyMonthly(changes.apiUsage.newValue); changed = true; }

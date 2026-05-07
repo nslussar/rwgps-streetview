@@ -64,6 +64,73 @@ input { font-family: inherit; font-variant-numeric: tabular-nums; }
 /* ───────── Body ───────── */
 .body { padding: 16px; }
 
+/* ───────── Preview on/off toggle (under header) ───────── */
+.preview-row {
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.preview-toggle {
+  width: 100%;
+  height: 42px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.08);
+  transition: background-color 120ms, transform 60ms, box-shadow 120ms;
+}
+.preview-toggle:hover:not(:disabled) {
+  background: var(--accent-hover);
+  box-shadow: 0 2px 6px rgba(31, 111, 235, 0.25);
+}
+.preview-toggle:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: 0 1px 1px rgba(17, 24, 39, 0.08);
+}
+.preview-toggle[aria-pressed="true"] {
+  background: #fb7185; /* rose-400 — pinkish "click to disable" */
+}
+.preview-toggle[aria-pressed="true"]:hover:not(:disabled) {
+  background: #f43f5e; /* rose-500 */
+  box-shadow: 0 2px 6px rgba(244, 63, 94, 0.3);
+}
+.preview-toggle:disabled {
+  background: var(--surface-alt);
+  color: var(--dim);
+  cursor: default;
+  box-shadow: none;
+  border: 1px solid var(--line);
+}
+.preview-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.preview-toggle-icon { flex-shrink: 0; }
+
+.preview-toggle-kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-transform: lowercase;
+  flex-shrink: 0;
+}
+
 /* ───────── First-run onboarding ───────── */
 .onboarding-card {
   background: linear-gradient(180deg, #f7f9fc 0%, #f1f4f9 100%);
