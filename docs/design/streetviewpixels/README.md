@@ -273,7 +273,7 @@ This confirms #1 (cross-origin works), #2 (x granularity once we sweep), and
 
 | Concern | File | Line | What lives there |
 |---|---|---:|---|
-| Tile endpoint constant | `content/content.js` | 39 | `TILE_BASE`, `DEFAULT_X_TILES`, `DEFAULT_Y_TILES` |
+| Tile endpoint constant + zoom helpers | `content/content.js` | 39 | `TILE_BASE`, `TILE_ZOOM`, `worldDivisorForZoom`, `defaultX/YTilesForZoom` |
 | Kill-switch state | `content/content.js` | 44 | `let useFreeTilePipeline = true;` |
 | Kill-switch storage read + late-init | `content/content.js` | 101–151 | `init()` reads `useFreeTilePipeline`, gates init, late-runs setup when toggled on |
 | `isOperational()` gate | `content/content.js` | 171–173 | Replaces the old `enabled && apiKey` checks throughout |
@@ -281,7 +281,7 @@ This confirms #1 (cross-origin works), #2 (x granularity once we sweep), and
 | Critical-path branch | `content/content.js` | 679–681 | `updateStreetViewImage()` → `updateStreetViewImageViaFreeTile()` if free pipeline on |
 | Free-tile path entry | `content/content.js` | 754–780 | Buckets, sends `LOOKUP_PANO`, queues spinner |
 | Tile URL builder | `content/content.js` | 782–788 | `buildTileUrl(panoid, x, y)` — produces a `streetviewpixels-pa` URL |
-| Heading→tile + 6-tile preload + sub-tile shift | `content/content.js` | 790–875 | `handlePanoInfo()`. ZERO_RESULTS branch, `worldSize` → `xTiles/yTiles`, +180° rel calc, `T/leftX/midX/rightX`, `frac`, atomic 6-tile swap with `transform: translateX(-200 * frac)` |
+| Heading→tile + 6-tile preload + sub-tile shift | `content/content.js` | 790–895 | `handlePanoInfo()`. ZERO_RESULTS branch, `worldSize` → `xTiles/yTiles` (floor-not-round on x), seam-row picked by rounding `worldSize.height/2 / divisor`, `horizonOffsetPx` shift, +180° rel calc, `T/leftX/midX/rightX`, `frac`, atomic 6-tile swap with `transform: translateX(-200 * frac) translateY(-horizonOffsetPx)` |
 | `getStreetViewLib()` (importLibrary) | `content/page-bridge.js` | 48–73 | Resolves `StreetViewService`+`StreetViewSource` via legacy global or dynamic loader |
 | `LOOKUP_PANO` request handler | `content/page-bridge.js` | 559–626 | Calls `getPanorama` with `source: GOOGLE`, passes `panoid + originHeading + worldSize` back |
 | Overlay tile grid CSS | `content/overlay.css` | 30–54 | `.sv-tiles` (600×400 inner, `top:-75px`) and `.sv-tile-{tl,tm,tr,bl,bm,br}` positions. Debug border on `.sv-tile`. |
@@ -313,11 +313,22 @@ switch is off. The popup's FIRSTRUN UI is still shown when no key is set
 toggle is above it.
 
 ### Tile geometry per panorama
-At zoom=4, the tile grid is `(worldSize.width / 1024) × (worldSize.height / 1024)`.
-For standard Google SV-car captures: 16 × 8 (22.5° per tile both axes).
-For trekker / photo-path captures: non-standard (e.g. 13 × 7). Out-of-range
-x or y returns INVALID_ARGUMENT. We read `worldSize` from the `getPanorama`
-response and clamp accordingly. Fallback to 16 × 8 if `worldSize` is absent.
+At a given zoom, the tile grid is `worldSize / (512 · 2^(5−zoom))` per axis.
+At our `TILE_ZOOM = 4` that's `worldSize / 1024` — 16×8 for standard SV-car
+captures, 13×7 for trekkers (worldSize 13312×6656). Out-of-range x or y
+returns INVALID_ARGUMENT, so we always derive dims from `tiles.worldSize`
+and fall back to 16×8 if absent. The `worldDivisorForZoom` /
+`defaultX/YTilesForZoom` helpers parameterize this so changing `TILE_ZOOM`
+is a one-line edit.
+
+We use **floor (not round)** for `xTiles`. Some non-standard widths divide
+to an unclean count (e.g. at zoom=3 a trekker 13312-wide is 6.5 tiles; at
+zoom=4 standard panos divide cleanly but the same defensive math applies
+to any future format). The server still serves an extra tile at the next
+index, but its right half is wrap-padding that visibly duplicates tile 0
+when the rendered grid spans it. Flooring avoids requesting that tile.
+`degPerXTile = 360 / xTilesContinuous` uses the *fractional* tile count so
+heading→tile math stays angularly correct after the floor.
 
 ### Heading → tile-x math
 ```
@@ -327,17 +338,69 @@ frac = (rel / degPerXTile) - floor(rel / degPerXTile)   ∈ [0, 1)
 ```
 The +180° offset accounts for the tile-x convention being opposite of the
 world heading: x=0 looks "backward" from originHeading. Render tiles
-`T-1, T, T+1` × `yTop, yBot`. The two rows flank the panorama's pitch
-midpoint: `yTop = max(0, floor(yTiles/2) - 1)`, `yBot = min(yTiles-1, floor(yTiles/2))`.
+`T-1, T, T+1` × `yTop, yBot`. The row pair is picked so the seam between
+them lands on the closest integer tile boundary to the panorama's vertical
+center (= horizon for typical panos):
+```
+seamRow = round(worldSize.height / 2 / divisor)         // clamp ∈ [1, yTiles-1]
+yTop    = seamRow - 1
+yBot    = seamRow
+```
+Naive `floor(yTiles/2)` works only when `yTiles` is even and the panorama
+is symmetric about horizon. For trekker 13×7s (yTiles=7) it lands the
+seam ~50px above true horizon; the rounding fix picks the nearest
+boundary and a `translateY` shift compensates the residual.
 
-### Sub-tile horizontal centering
+### Sub-tile centering (X and Y)
 Inner `.sv-tiles` div is 600 wide × 400 tall (3 tiles × 2 tiles, each 200 px).
-Default position centers the middle column in the viewport with `top: -75px`
-(crops top/bottom for horizon centering). JS sets `transform: translateX(-200 * frac)`
-in `handlePanoInfo` so the heading lands at the horizontal center of the
-400-wide viewport regardless of where in tile T it falls. Pan range is
-`-200..0 px`, mapping `frac` of `0..1` to "heading at left seam" through
-"heading at right seam".
+CSS `top: -75px` puts the rendered seam at the viewport's vertical center.
+JS in `handlePanoInfo` sets a per-render transform combining both axes:
+```
+transform: translateX(-200 * frac) translateY(-horizonOffsetPx)
+```
+The X shift puts the heading at horizontal center regardless of where in
+tile T it falls (pan range `-200..0 px`, mapping `frac` of `0..1` to
+"heading at left seam" through "heading at right seam"). The Y shift
+compensates for the residual offset between the chosen seam row and the
+panorama's true vertical center:
+```
+horizonOffsetPx = ((worldSize.height/2 - seamRow*divisor) / divisor) * 200
+```
+For standard 16×8 panos this is 0 (seam already at center). For trekker
+13×7s it's +50 px, putting horizon at viewport center where it would
+otherwise sit ~50 px below.
+
+### Why `TILE_ZOOM = 4` (and not 3)
+We tried zoom=3 as an experiment. Each tile covers 45° horizontally
+instead of 22.5°, doubling the visible FOV in the same overlay viewport
+— a "wider context" preview. It worked perfectly on standard SV-car
+captures (16384×8192 → clean 8×4 grid at zoom=3) but fell apart on
+trekker captures (13312×6656 → 6.5×3.25 at zoom=3, non-integer):
+
+- **Vertical:** `floor(yTiles/2)` row pair landed ~30° above horizon
+  (sky-dominated view). Fixable — the seam-row rounding + translateY
+  shift documented above was developed for this and is now applied at
+  every zoom.
+- **Horizontal:** no clean fix. Rounding `xTiles` UP includes a
+  half-padded trailing tile whose right half wraps into tile 0,
+  producing visible content duplication mid-panorama. Rounding DOWN
+  drops that tile but leaves a ~28° angular gap in the rendered
+  panorama; when the cursor heading puts the gap inside the rendered
+  viewport, two angularly-distant slices of the panorama butt against
+  each other at a tile boundary, producing a hard content "jump".
+
+Both artifacts are visible and ugly. Per-pano fallback to zoom=4 for
+non-cleanly-dividing panos was considered, but trekker captures
+dominate exactly the routes this extension is meant for (bike paths,
+pedestrian corridors), so the toggle would silently downgrade in the
+common case — confusing UX. We chose to keep `TILE_ZOOM = 4` as the
+sole render path: every panorama type known to the endpoint divides
+cleanly at zoom=4 (standard 16×8, trekker 13×7), trading some viewport
+FOV for consistent, artifact-free rendering across all pano types.
+
+The vertical-centering machinery from the experiment was retained — it
+benefits trekker panos at zoom=4 too (yTiles=7 has the same odd-row
+problem and gets a +50 px translateY).
 
 ### Panorama source filtering
 `getPanorama` is called with `source: StreetViewSource.GOOGLE` so it returns
