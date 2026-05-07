@@ -32,13 +32,18 @@
   // intentionally not auto-scaled — large buckets at low zoom would snap
   // requests onto neighboring streets / off-coverage spots.
   const PIXEL_FLOOR_SKIP = 5;
-  // streetviewpixels-pa tile endpoint (free, no API key). At zoom=4 the panorama
-  // is split into a worldSize/1024 grid (e.g. 16×8 for standard SV-car captures,
-  // but trekker / photo-path panoramas have non-standard dimensions). Actual
-  // grid dimensions come from `tiles.worldSize` in the getPanorama response.
+  // streetviewpixels-pa tile endpoint (free, no API key). The endpoint exposes
+  // tile-grid levels via the `zoom` param. At each level the panorama is split
+  // into `worldSize / (512 * 2^(5-zoom))` tiles per axis: zoom=5 → worldSize/512
+  // (full res, 32×16 standard), zoom=4 → /1024 (16×8), zoom=3 → /2048 (8×4).
+  // Tile pixels are always 512×512, so lower zoom = wider angular coverage per
+  // tile = lower per-pixel detail. Actual grid dims come from `tiles.worldSize`
+  // in the getPanorama response; defaults below are the standard SV-car case.
   const TILE_BASE = 'https://streetviewpixels-pa.googleapis.com/v1/tile';
-  const DEFAULT_X_TILES = 16; // fallback when worldSize is unavailable
-  const DEFAULT_Y_TILES = 8;
+  const TILE_ZOOM = 4;
+  function worldDivisorForZoom(z) { return 512 * Math.pow(2, 5 - z); } // px per tile in worldSize space
+  function defaultXTilesForZoom(z) { return 32 / Math.pow(2, 5 - z); } // standard SV-car horizontal grid
+  function defaultYTilesForZoom(z) { return 16 / Math.pow(2, 5 - z); } // standard SV-car vertical grid
   let apiKey = '';
   let enabled = true;
   let useFreeTilePipeline = true;
@@ -784,7 +789,7 @@
       + '?cb_client=maps_sv.tactile'
       + '&panoid=' + encodeURIComponent(panoid)
       + '&x=' + x + '&y=' + y
-      + '&zoom=4&nbt=1&fover=2';
+      + '&zoom=' + TILE_ZOOM + '&nbt=1&fover=2';
   }
 
   function handlePanoInfo(data, requestId) {
@@ -802,20 +807,51 @@
       return;
     }
 
-    // Tile-grid dimensions vary per panorama (standard SV-car captures are
-    // 16×8 at zoom=4, but trekker / photo-path panoramas are non-standard
-    // and will INVALID_ARGUMENT for x or y outside their range).
-    var xTiles = DEFAULT_X_TILES;
-    var yTiles = DEFAULT_Y_TILES;
+    // Tile-grid dimensions vary per panorama. Standard Google SV-car captures
+    // are 16×8 at zoom=4; trekker / photo-path captures are non-standard
+    // (e.g. 13×7) and will INVALID_ARGUMENT for x or y outside their range.
+    // worldSize is reported at full resolution (zoom=5); divide by the per-zoom
+    // pixel-per-tile factor to get this zoom level's grid. Floor (not round)
+    // x — non-standard panoramas can have a half-padded trailing tile that
+    // wraps into tile 0 and produces visible duplication.
+    var divisor = worldDivisorForZoom(TILE_ZOOM);
+    var xTiles = defaultXTilesForZoom(TILE_ZOOM);
+    var yTiles = defaultYTilesForZoom(TILE_ZOOM);
+    var xTilesContinuous = xTiles; // fractional grid count; used for angular math
     if (data.worldSize && data.worldSize.width && data.worldSize.height) {
-      xTiles = Math.max(1, Math.round(data.worldSize.width / 1024));
-      yTiles = Math.max(2, Math.round(data.worldSize.height / 1024));
+      xTilesContinuous = data.worldSize.width / divisor;
+      xTiles = Math.max(1, Math.floor(xTilesContinuous));
+      yTiles = Math.max(2, Math.round(data.worldSize.height / divisor));
     }
-    var degPerXTile = 360 / xTiles;
-    // Choose y rows that flank the horizon. For standard 8-tall: y=3, y=4.
-    // For non-standard heights: middle pair.
-    var yTop = Math.max(0, Math.floor(yTiles / 2) - 1);
-    var yBot = Math.min(yTiles - 1, Math.floor(yTiles / 2));
+    // Each tile-index advances the camera by `divisor` worldsize px around the
+    // panorama, regardless of how many indices we render. Use the continuous
+    // grid count so the heading→tile math stays angularly correct even when
+    // the floored xTiles dropped a partial tile.
+    var degPerXTile = 360 / xTilesContinuous;
+    // Choose y rows flanking the horizon. The horizon is approximately at the
+    // panorama's vertical center (worldSize.height/2). Pick the tile-row pair
+    // whose seam is closest to that center, then translateY-shift the inner
+    // div to put horizon at the viewport vertical center.
+    //
+    // Why round-to-nearest-seam (not floor(yTiles/2)): non-standard panoramas
+    // (e.g. trekker 13312×6656) have non-integer rows-per-half-panorama. At
+    // zoom=4 a 6656-tall pano gives yTiles=7 → floor(7/2)-1=2 puts the seam
+    // 50px above the true center; round-to-nearest picks seamRow=3 with a
+    // translateY of +50px to compensate, landing horizon at viewport center.
+    var horizonWorldY = (data.worldSize && data.worldSize.height) ? data.worldSize.height / 2 : (yTiles * divisor / 2);
+    var seamRow = Math.round(horizonWorldY / divisor);
+    seamRow = Math.max(1, Math.min(yTiles - 1, seamRow));
+    var yTop = seamRow - 1;
+    var yBot = seamRow;
+    // Inner-div pixels horizon sits below the seam (negative = above seam).
+    // Each tile renders at 200 px; spans `divisor` worldsize px.
+    var horizonOffsetPx = ((horizonWorldY - seamRow * divisor) / divisor) * 200;
+    console.log('[RWGPS Street View] pano',
+      data.panoid,
+      'worldSize=' + (data.worldSize ? data.worldSize.width + 'x' + data.worldSize.height : 'null'),
+      'tiles=' + xTiles + 'x' + yTiles,
+      'seamRow=' + seamRow,
+      'yShift=' + horizonOffsetPx.toFixed(1) + 'px');
 
     // 3-wide tile selection. The middle tile (T) contains the route heading.
     // We render T-1 and T+1 alongside it so we have horizontal pan room to
@@ -853,8 +889,12 @@
           done = true;
           clearTimeout(loadingSpinnerTimer);
           hasLoadedImage = true;
-          // Sub-tile horizontal shift so the heading lands at viewport center
-          overlayTilesEl.style.transform = 'translateX(' + (-200 * frac) + 'px)';
+          // Sub-tile horizontal shift so the heading lands at viewport center,
+          // plus vertical shift so horizon lands at viewport center (compensates
+          // for non-integer yTiles where the chosen seam isn't exactly at horizon).
+          overlayTilesEl.style.transform =
+            'translateX(' + (-200 * frac) + 'px) ' +
+            'translateY(' + (-horizonOffsetPx) + 'px)';
           for (var j = 0; j < 6; j++) overlayTiles[j].src = urls[j];
           overlayImg.style.display = 'none';
           overlayTilesEl.style.display = 'block';

@@ -600,6 +600,7 @@
                   snappedLat: d.location.latLng.lat(),
                   snappedLng: d.location.latLng.lng(),
                   originHeading: d.tiles && d.tiles.originHeading,
+                  originPitch: d.tiles && d.tiles.originPitch,
                   worldSize: ws ? { width: ws.width, height: ws.height } : null
                 },
                 requestId: reqId
