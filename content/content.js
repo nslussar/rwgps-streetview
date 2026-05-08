@@ -1048,15 +1048,32 @@
   }
 
   function showPanoError(data) {
-    // Existing error UI inlined here as a stub. Fully refactored in Task 12.
     clearTimeout(loadingSpinnerTimer);
     overlayImg.style.display = 'none';
     overlayTilesEl.style.display = 'none';
+    copyrightEl.style.display = 'none';     // ensure attribution clears across renders
     loadingEl.style.display = 'none';
-    noCoverageEl.textContent = data.noCoverage
-      ? 'No Street View coverage here'
-      : (navigator.onLine ? 'Street View lookup failed' : 'Could not load — check your connection');
+    if (data.errorClass) {
+      console.log('[RWGPS Street View] error',
+        data.errorClass + ':', data.error || '(no detail)');
+    }
+    noCoverageEl.textContent = panoErrorMessage(data);
     noCoverageEl.style.display = 'flex';
+  }
+
+  // The G1/G2/G3 suffixes give a user something specific to type into a bug
+  // report without leaking implementation details into the UI. See spec
+  // section 4.3.
+  function panoErrorMessage(data) {
+    if (data.noCoverage) return 'No Street View coverage here';
+    if (!navigator.onLine) return 'Could not load — check your connection';
+    switch (data.errorClass) {
+      case 'UGC_RPC_HTTP_ERROR':  return 'Street View lookup failed (G1)';
+      case 'UGC_RPC_PARSE_FAIL':  return 'Street View lookup failed (G2)';
+      case 'UGC_URL_NOT_FOUND':   return 'Street View lookup failed (G3)';
+      case 'UGC_IMAGE_LOAD_FAIL': return 'Could not load image';
+      default:                    return 'Street View lookup failed';
+    }
   }
 
   function handlePanoInfo(data, requestId) {
