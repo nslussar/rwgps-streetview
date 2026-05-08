@@ -60,3 +60,54 @@ test('buildSingleImageSearchBody: matches doc-recipe-2 positional shape', () => 
   assert.deepEqual(body[3][0], [1,2,3,4,8,6,17]);
   assert.deepEqual(body[3][10], [null, null, [[[100, 100]]]]);
 });
+
+const fs = require('node:fs');
+const path = require('node:path');
+
+const fixturePath = (name) =>
+  path.join(__dirname, 'fixtures', 'photospheres', name);
+
+test('parseUgcUrlFromResponse: extracts gpms-cs-s URL from happy-path UGC', () => {
+  const raw = fs.readFileSync(fixturePath('ugc_discovery_park.json'), 'utf8');
+  const result = RwgpsPhotospheres.parseUgcUrlFromResponse(raw);
+  assert.equal(result.ok, true);
+  assert.match(result.tokenBase, /^https:\/\/lh3\.googleusercontent\.com\/gpms-cs-s\/[A-Za-z0-9_-]+$/);
+});
+
+test('parseUgcUrlFromResponse: extracts URL from second UGC fixture (parser not overfitted)', () => {
+  const raw = fs.readFileSync(fixturePath('ugc_olympic_trail.json'), 'utf8');
+  const result = RwgpsPhotospheres.parseUgcUrlFromResponse(raw);
+  assert.equal(result.ok, true);
+  assert.match(result.tokenBase, /^https:\/\/lh3\.googleusercontent\.com\/gpms-cs-s\/[A-Za-z0-9_-]+$/);
+});
+
+test('parseUgcUrlFromResponse: returns UGC_URL_NOT_FOUND on no-results fixture', () => {
+  const raw = fs.readFileSync(fixturePath('no_results.json'), 'utf8');
+  const result = RwgpsPhotospheres.parseUgcUrlFromResponse(raw);
+  assert.equal(result.ok, false);
+  assert.equal(result.errorClass, 'UGC_URL_NOT_FOUND');
+});
+
+test('parseUgcUrlFromResponse: returns UGC_RPC_PARSE_FAIL on malformed JSON', () => {
+  const result = RwgpsPhotospheres.parseUgcUrlFromResponse('not valid json');
+  assert.equal(result.ok, false);
+  assert.equal(result.errorClass, 'UGC_RPC_PARSE_FAIL');
+});
+
+test('parseUgcUrlFromResponse: strips )]}\\\' XSSI prefix defensively', () => {
+  // Synthesize a body with the XSSI prefix that the Maps API doesn't
+  // actually use, but TheGreatRambler's photometa does. Free to defend.
+  const fakeBody = ")]}'\n[[\"https://lh3.googleusercontent.com/gpms-cs-s/abc123-test\"]]";
+  const result = RwgpsPhotospheres.parseUgcUrlFromResponse(fakeBody);
+  assert.equal(result.ok, true);
+  assert.equal(result.tokenBase, 'https://lh3.googleusercontent.com/gpms-cs-s/abc123-test');
+});
+
+test('parseUgcUrlFromResponse: tokenBase ends BEFORE the render-spec separator', () => {
+  // Real responses have URLs like .../gpms-cs-s/<token>=w150-h75-k-no
+  // We need the token base WITHOUT =w...; the regex must stop at the first =.
+  const fakeBody = '[[["https://lh3.googleusercontent.com/gpms-cs-s/SOMETOKEN=w150-h75-k-no"]]]';
+  const result = RwgpsPhotospheres.parseUgcUrlFromResponse(fakeBody);
+  assert.equal(result.ok, true);
+  assert.equal(result.tokenBase, 'https://lh3.googleusercontent.com/gpms-cs-s/SOMETOKEN');
+});
