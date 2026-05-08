@@ -574,10 +574,16 @@
             location: { lat: msg.data.lat, lng: msg.data.lng },
             radius: radius
           };
-          // Filter out user-contributed photospheres — the streetviewpixels-pa
-          // tile endpoint doesn't serve them, so we'd get a panoid we can't
-          // render. GOOGLE source = Google-captured SV only.
-          var sourceVal = (lib.StreetViewSource && lib.StreetViewSource.GOOGLE) || 'google';
+          // OUTDOOR excludes indoor type-2 ("Business View") panoramas AND
+          // admits user-contributed photospheres (type-10) into the candidate
+          // set. At the extension's small radius, type-2 ranking is effectively
+          // moot on bike paths (no type-2 in range) and OUTDOOR falls through
+          // to type-10 by elimination — recovering bike-path coverage.
+          // See spec section 2.2.
+          //
+          // FUTURE: filter UGC by source tag (photos:street_view_android only)
+          // if quality complaints come in — see spec section 7.2.
+          var sourceVal = (lib.StreetViewSource && lib.StreetViewSource.OUTDOOR) || 'outdoor';
           opts.source = sourceVal;
           svc.getPanorama(opts)
             .then(function (res) {
