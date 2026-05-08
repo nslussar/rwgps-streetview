@@ -111,3 +111,33 @@ test('parseUgcUrlFromResponse: tokenBase ends BEFORE the render-spec separator',
   assert.equal(result.ok, true);
   assert.equal(result.tokenBase, 'https://lh3.googleusercontent.com/gpms-cs-s/SOMETOKEN');
 });
+
+test('buildUgcRenderUrl: produces correct render-spec for forward-aligned heading', () => {
+  const tokenBase = 'https://lh3.googleusercontent.com/gpms-cs-s/SOMETOKEN';
+  // routeHeading 90, panoOriginHeading 90 → yaw 0 (forward).
+  const url = RwgpsPhotospheres.buildUgcRenderUrl(tokenBase, 90, 90, 0, 400, 250);
+  assert.equal(url, 'https://lh3.googleusercontent.com/gpms-cs-s/SOMETOKEN=w400-h250-k-no-pi0.0-ya0.0-ro0-fo90');
+});
+
+test('buildUgcRenderUrl: yaw is positive modulo 360', () => {
+  const tokenBase = 'https://lh3.googleusercontent.com/gpms-cs-s/SOMETOKEN';
+  // routeHeading 10, panoOriginHeading 350 → naive diff -340, normalized to 20.
+  const url = RwgpsPhotospheres.buildUgcRenderUrl(tokenBase, 10, 350, 0, 400, 250);
+  assert.equal(url, 'https://lh3.googleusercontent.com/gpms-cs-s/SOMETOKEN=w400-h250-k-no-pi0.0-ya20.0-ro0-fo90');
+});
+
+test('buildUgcRenderUrl: hardcodes pi=0 in v1 regardless of originPitch', () => {
+  // Per spec section 2.5: function takes originPitch as a forward-compat
+  // parameter but the v1 body hardcodes pi=0 and ignores it. Post-probe,
+  // if the captured horizon is genuinely tilted, this test will be updated
+  // to assert pi reflects originPitch.
+  const tokenBase = 'https://lh3.googleusercontent.com/gpms-cs-s/SOMETOKEN';
+  const url = RwgpsPhotospheres.buildUgcRenderUrl(tokenBase, 0, 0, /* originPitch */ 5.5, 400, 250);
+  assert.match(url, /pi0\.0/);
+});
+
+test('buildUgcRenderUrl: uses requested viewport dimensions', () => {
+  const tokenBase = 'https://lh3.googleusercontent.com/gpms-cs-s/SOMETOKEN';
+  const url = RwgpsPhotospheres.buildUgcRenderUrl(tokenBase, 0, 0, 0, 800, 500);
+  assert.match(url, /=w800-h500-/);
+});
