@@ -359,10 +359,21 @@
   }
 
   function injectBridge() {
-    const script = document.createElement('script');
-    script.src = chrome.runtime.getURL('content/page-bridge.js');
-    document.documentElement.appendChild(script);
-    script.onload = function () { script.remove(); };
+    // Inject the photospheres lib first so the bridge can call its helpers.
+    // Both go into MAIN world (the bridge's execution context). Top-level
+    // const declarations in the lib become available to the bridge via
+    // shared global lexical scope; the lib also attaches to window for
+    // belt-and-suspenders.
+    const lib = document.createElement('script');
+    lib.src = chrome.runtime.getURL('lib/photospheres.js');
+    document.documentElement.appendChild(lib);
+    lib.onload = function () {
+      lib.remove();
+      const script = document.createElement('script');
+      script.src = chrome.runtime.getURL('content/page-bridge.js');
+      document.documentElement.appendChild(script);
+      script.onload = function () { script.remove(); };
+    };
   }
 
   function createOverlay() {
