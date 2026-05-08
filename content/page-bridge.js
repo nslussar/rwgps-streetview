@@ -67,6 +67,91 @@
     return Promise.resolve(null);
   }
 
+  // SingleImageSearch RPC — used to extract the gpms-cs-s URL for type-10
+  // (UGC) panoramas. The endpoint is keyless; CORS-permissive from
+  // ridewithgps.com origin. See design spec section 4.2 for the request
+  // shape rationale.
+  var SINGLE_IMAGE_SEARCH_URL =
+    'https://maps.googleapis.com/$rpc/google.internal.maps.mapsjs.v1.MapsJsInternalService/SingleImageSearch';
+
+  // No bridge-side cache for v1: each LOOKUP_PANO that resolves to type-10
+  // fires its own SingleImageSearch. Forward-sweep workflows get zero
+  // benefit from caching here (each bucketed cursor position resolves to a
+  // unique panoid on trails with ~10m UGC spacing — typical when one rider
+  // uploads via a 360 camera at fixed intervals). Re-sweep / cursor-pause
+  // workflows would benefit, but the cache costs ~10 lines.
+  // FUTURE: see spec section 7.1 for a panoid-keyed cache + concurrent-dedup
+  // map design when telemetry justifies it.
+
+  // POST a SingleImageSearch request and parse the response for the
+  // gpms-cs-s URL. Returns:
+  //   { ok: true,  tokenBase: '...' }
+  //   { ok: false, errorClass: 'UGC_RPC_HTTP_ERROR' | 'UGC_RPC_PARSE_FAIL' | 'UGC_URL_NOT_FOUND', message: string }
+  async function singleImageSearch(lat, lng, radius) {
+    var body;
+    try {
+      body = JSON.stringify(
+        RwgpsPhotospheres.buildSingleImageSearchBody(lat, lng, radius));
+    } catch (e) {
+      return {
+        ok: false,
+        errorClass: 'UGC_RPC_PARSE_FAIL',
+        message: 'body build failed: ' + e.message
+      };
+    }
+
+    var resp;
+    try {
+      resp = await fetch(SINGLE_IMAGE_SEARCH_URL, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json+protobuf',
+          'x-user-agent': 'grpc-web-javascript/0.1'
+        },
+        body: body
+      });
+    } catch (e) {
+      return {
+        ok: false,
+        errorClass: 'UGC_RPC_HTTP_ERROR',
+        message: 'network: ' + e.message
+      };
+    }
+
+    if (!resp.ok) {
+      return {
+        ok: false,
+        errorClass: 'UGC_RPC_HTTP_ERROR',
+        message: 'HTTP ' + resp.status
+      };
+    }
+
+    var rawText = await resp.text();
+    return RwgpsPhotospheres.parseUgcUrlFromResponse(rawText);
+  }
+
+  // Wrap window.postMessage boilerplate for PANO_INFO responses.
+  function sendPanoInfo(reqId, data) {
+    window.postMessage({
+      type: PREFIX + 'RESPONSE',
+      action: 'PANO_INFO',
+      data: data,
+      requestId: reqId
+    }, '*');
+  }
+  function sendPanoInfoError(reqId, errResult) {
+    window.postMessage({
+      type: PREFIX + 'RESPONSE',
+      action: 'PANO_INFO',
+      data: {
+        error: errResult.message || 'unknown',
+        noCoverage: errResult.errorClass === 'NO_COVERAGE',
+        errorClass: errResult.errorClass
+      },
+      requestId: reqId
+    }, '*');
+  }
+
   // Throttle tracking updates to ~12/sec (every 80ms)
   let lastTrackingSend = 0;
   let pendingTrackingLatlng = null;
@@ -586,41 +671,53 @@
           var sourceVal = (lib.StreetViewSource && lib.StreetViewSource.OUTDOOR) || 'outdoor';
           opts.source = sourceVal;
           svc.getPanorama(opts)
-            .then(function (res) {
+            .then(async function (res) {
               var d = res && res.data;
               if (!d || !d.location) {
-                window.postMessage({
-                  type: PREFIX + 'RESPONSE',
-                  action: 'PANO_INFO',
-                  data: { error: 'no data' },
-                  requestId: reqId
-                }, '*');
+                sendPanoInfoError(reqId, { errorClass: 'NO_COVERAGE', message: 'no data' });
                 return;
               }
+
+              var panoid = d.location.pano;
+              var common = {
+                panoid: panoid,
+                snappedLat: d.location.latLng.lat(),
+                snappedLng: d.location.latLng.lng(),
+                originHeading: d.tiles && d.tiles.originHeading,
+                originPitch: d.tiles && d.tiles.originPitch,
+                copyright: d.copyright || ''
+              };
+
+              // Type-10 (UGC) branch — fire SingleImageSearch to extract the
+              // gpms-cs-s URL. streetviewpixels-pa doesn't serve type-10, so
+              // we have to render via a different content tier.
+              if (RwgpsPhotospheres.isUgcPanoid(panoid)) {
+                var ugcResult = await singleImageSearch(msg.data.lat, msg.data.lng, radius);
+                if (ugcResult.ok) {
+                  sendPanoInfo(reqId, Object.assign({}, common, {
+                    kind: 'ugc',
+                    tokenBase: ugcResult.tokenBase
+                  }));
+                } else {
+                  sendPanoInfoError(reqId, ugcResult);
+                }
+                return;
+              }
+
+              // Type-2 path — existing tile-grid render.
               var ws = d.tiles && d.tiles.worldSize;
-              window.postMessage({
-                type: PREFIX + 'RESPONSE',
-                action: 'PANO_INFO',
-                data: {
-                  panoid: d.location.pano,
-                  snappedLat: d.location.latLng.lat(),
-                  snappedLng: d.location.latLng.lng(),
-                  originHeading: d.tiles && d.tiles.originHeading,
-                  originPitch: d.tiles && d.tiles.originPitch,
-                  worldSize: ws ? { width: ws.width, height: ws.height } : null
-                },
-                requestId: reqId
-              }, '*');
+              sendPanoInfo(reqId, Object.assign({}, common, {
+                kind: 'tile',
+                worldSize: ws ? { width: ws.width, height: ws.height } : null
+              }));
             })
             .catch(function (e) {
               var emsg = String(e && e.message || e);
               var noCoverage = emsg.indexOf('ZERO_RESULTS') !== -1;
-              window.postMessage({
-                type: PREFIX + 'RESPONSE',
-                action: 'PANO_INFO',
-                data: { error: emsg, noCoverage: noCoverage },
-                requestId: reqId
-              }, '*');
+              sendPanoInfoError(reqId, {
+                errorClass: noCoverage ? 'NO_COVERAGE' : 'UGC_RPC_HTTP_ERROR',
+                message: emsg
+              });
             });
         });
         break;
