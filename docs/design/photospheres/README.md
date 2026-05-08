@@ -1,6 +1,8 @@
 # UGC Photospheres — research notes
 
-**Status (2026-05-06):** investigated; implementation required to fix
+**Status:** Implemented 2026-05-07 via [`docs/superpowers/specs/2026-05-07-photospheres-ugc-rendering-design.md`](../../superpowers/specs/2026-05-07-photospheres-ugc-rendering-design.md) and [`docs/superpowers/plans/2026-05-07-photospheres-ugc-rendering.md`](../../superpowers/plans/2026-05-07-photospheres-ugc-rendering.md). This research doc remains for historical context.
+
+**Original status (2026-05-06):** investigated; implementation required to fix
 confirmed bike-path coverage regression. See "Decision" below.
 
 ## What this doc is
