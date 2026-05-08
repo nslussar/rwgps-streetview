@@ -692,7 +692,12 @@
               // gpms-cs-s URL. streetviewpixels-pa doesn't serve type-10, so
               // we have to render via a different content tier.
               if (RwgpsPhotospheres.isUgcPanoid(panoid)) {
-                var ugcResult = await singleImageSearch(msg.data.lat, msg.data.lng, radius);
+                // Use the SNAPPED pano coords (from getPanorama) instead of the
+                // raw cursor lat/lng. SingleImageSearch ranks results by proximity
+                // to the query point — using the snapped coords guarantees we
+                // match the same pano getPanorama just confirmed exists, not a
+                // different nearby UGC pano.
+                var ugcResult = await singleImageSearch(common.snappedLat, common.snappedLng, radius);
                 if (ugcResult.ok) {
                   sendPanoInfo(reqId, Object.assign({}, common, {
                     kind: 'ugc',
@@ -714,8 +719,13 @@
             .catch(function (e) {
               var emsg = String(e && e.message || e);
               var noCoverage = emsg.indexOf('ZERO_RESULTS') !== -1;
+              // For non-ZERO_RESULTS getPanorama failures, leave errorClass
+              // unset — these are Maps JS metadata-lookup failures, not the
+              // SingleImageSearch (G1) class. The content script's
+              // panoErrorMessage will fall through to the generic
+              // "Street View lookup failed" message.
               sendPanoInfoError(reqId, {
-                errorClass: noCoverage ? 'NO_COVERAGE' : 'UGC_RPC_HTTP_ERROR',
+                errorClass: noCoverage ? 'NO_COVERAGE' : null,
                 message: emsg
               });
             });
