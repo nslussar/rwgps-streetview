@@ -1260,6 +1260,11 @@
   function hideOverlay() {
     overlayEl.style.display = 'none';
     lastShownPoint = null;
+    lastUgcTokenBase = null;
+    lastUgcOriginHeading = null;
+    lastUgcOriginPitch = null;
+    lastUgcCopyright = null;
+    if (copyrightEl) copyrightEl.style.display = 'none';
     lastGeocodedPoint = null;
     cancelLingerTimer();
     if (positionRafId !== null) {
