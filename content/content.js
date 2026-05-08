@@ -92,6 +92,7 @@
   let headingLabelEl = null;
   let headingArrowEl = null;
   let hintLabelEl = null;
+  let copyrightEl = null;
   let loadingEl = null;
   let lastGeocodedPoint = null;
   let geocodeCounter = 0;
@@ -434,6 +435,10 @@
     hintLabelEl.appendChild(hintKbdS);
     hintLabelEl.appendChild(document.createTextNode(' to disable'));
 
+    copyrightEl = document.createElement('div');
+    copyrightEl.className = 'sv-copyright';
+    copyrightEl.style.display = 'none';
+
     overlayEl.appendChild(overlayImg);
     overlayEl.appendChild(overlayTilesEl);
     overlayEl.appendChild(loadingEl);
@@ -442,6 +447,7 @@
     overlayEl.appendChild(headingLabelEl);
     overlayEl.appendChild(hintLabelEl);
     overlayEl.appendChild(headingArrowEl);
+    overlayEl.appendChild(copyrightEl);
     document.body.appendChild(overlayEl);
     applyOverlayCssVars();
   }
