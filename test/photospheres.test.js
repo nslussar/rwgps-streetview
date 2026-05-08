@@ -27,3 +27,7 @@ test('isUgcPanoid: rejects null / undefined / non-string', () => {
   assert.equal(RwgpsPhotospheres.isUgcPanoid(undefined), false);
   assert.equal(RwgpsPhotospheres.isUgcPanoid(42), false);
 });
+
+test('isUgcPanoid: bare prefix without payload returns true (accepted current behavior — downstream code is responsible for handling malformed payloads)', () => {
+  assert.equal(RwgpsPhotospheres.isUgcPanoid('CAoS'), true);
+});
