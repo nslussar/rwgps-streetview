@@ -38,6 +38,10 @@ test('buildSingleImageSearchBody: matches doc-recipe-2 positional shape', () => 
   // shape changes that would break SingleImageSearch requests.
   assert.equal(Array.isArray(body), true);
   assert.equal(body.length, 4, 'body has 4 top-level segments');
+  assert.equal(body[0].length, 11, 'segment 0 length');
+  assert.equal(body[1].length, 2,  'segment 1 length');
+  assert.equal(body[2].length, 11, 'segment 2 length');
+  assert.equal(body[3].length, 11, 'segment 3 length');
 
   // Segment 0: client identifier
   assert.deepEqual(body[0][0], 'apiv3');
