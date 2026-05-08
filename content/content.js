@@ -989,21 +989,38 @@
       + '&zoom=' + TILE_ZOOM + '&nbt=1&fover=2';
   }
 
+  function renderUgcPanorama(data, requestId) {
+    // Implemented in Task 11.
+    showPanoError({ error: 'ugc render not implemented yet', noCoverage: false });
+  }
+
+  function showPanoError(data) {
+    // Existing error UI inlined here as a stub. Fully refactored in Task 12.
+    clearTimeout(loadingSpinnerTimer);
+    overlayImg.style.display = 'none';
+    overlayTilesEl.style.display = 'none';
+    loadingEl.style.display = 'none';
+    noCoverageEl.textContent = data.noCoverage
+      ? 'No Street View coverage here'
+      : (navigator.onLine ? 'Street View lookup failed' : 'Could not load — check your connection');
+    noCoverageEl.style.display = 'flex';
+  }
+
   function handlePanoInfo(data, requestId) {
     if (requestId !== panoLookupCounter) return; // stale
 
     if (data.error) {
-      clearTimeout(loadingSpinnerTimer);
-      overlayImg.style.display = 'none';
-      overlayTilesEl.style.display = 'none';
-      loadingEl.style.display = 'none';
-      noCoverageEl.textContent = data.noCoverage
-        ? 'No Street View coverage here'
-        : (navigator.onLine ? 'Street View lookup failed' : 'Could not load — check your connection');
-      noCoverageEl.style.display = 'flex';
-      return;
+      return showPanoError(data);
     }
 
+    if (data.kind === 'ugc') {
+      return renderUgcPanorama(data, requestId);
+    }
+    // Defaults to tile path (also handles legacy responses without `kind`).
+    return renderTilePanorama(data, requestId);
+  }
+
+  function renderTilePanorama(data, requestId) {
     // Tile-grid dimensions vary per panorama. Standard Google SV-car captures
     // are 16×8 at zoom=4; trekker / photo-path captures are non-standard
     // (e.g. 13×7) and will INVALID_ARGUMENT for x or y outside their range.
