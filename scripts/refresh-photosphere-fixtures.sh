@@ -20,7 +20,7 @@ mkdir -p "$OUT"
 
 curl_sis() {  # lat lng radius outfile
   local lat="$1" lng="$2" radius="$3" outfile="$4"
-  curl -s 'https://maps.googleapis.com/$rpc/google.internal.maps.mapsjs.v1.MapsJsInternalService/SingleImageSearch' \
+  curl -sf 'https://maps.googleapis.com/$rpc/google.internal.maps.mapsjs.v1.MapsJsInternalService/SingleImageSearch' \
     -H 'content-type: application/json+protobuf' \
     -H 'x-user-agent: grpc-web-javascript/0.1' \
     -H 'origin: https://ridewithgps.com' \
