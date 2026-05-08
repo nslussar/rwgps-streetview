@@ -486,6 +486,50 @@ for visual comparison.
 The spec gets a "Verified on YYYY-MM-DD: yaw=X, pi=Y, XSSI=Z" stamp once
 these are pinned.
 
+### Empirical results (verified 2026-05-07)
+
+Probed **out-of-browser** by fetching `gpms-cs-s` URLs directly with the
+captured Curt Sumner panorama token from `test/fixtures/photospheres/ugc_olympic_trail.json`
+and viewing the rendered images. Side-by-side visual comparison with the
+expected forward-along-trail view (route is approximately east-bound at this
+lat/lng).
+
+- **Yaw direction:** **formula correct as designed**, no code change needed.
+  Empirical sweep at fixed lat/lng showed:
+  - `ya=0` → looks ~True North (sideways into forest).
+  - `ya=90` → looks ~True East along the trail (forward — what we want for
+    east-going route).
+  - `ya=180` → looks ~True South (sideways at hillside).
+  - `ya=270` → looks ~True West along the trail (backward).
+  Conclusion: this UGC pano's `ya=0` is approximately True North, meaning
+  Maps JS's normalization gives `originHeading ≈ 0` for renderable UGC
+  panoramas. Our formula `ya = (routeHeading - originHeading + 360) % 360`
+  reduces to `ya = routeHeading` for these panoramas, which produces the
+  desired forward-along-route view.
+- **Pitch baseline `pi=0`:** **correct as designed**, no code change needed.
+  At `pi=0, ya=90` (forward-east), the horizon was visibly level and the
+  trail vanishing point landed at the vertical center. `pi=-10` rotated the
+  view upward (more sky), `pi=10` rotated it downward (more foreground trail);
+  neither was preferable. THETA-X-on-recumbent-bike rigs apparently produce
+  pre-leveled output by the time it reaches `gpms-cs-s`, so passing
+  `originPitch` through is unnecessary at this resolution. The
+  `buildUgcRenderUrl` v1 hardcoded `pi=0` stays.
+- **XSSI prefix:** **not present** on SingleImageSearch responses. Both
+  fixture captures (`ugc_discovery_park.json`, `ugc_olympic_trail.json`) and
+  the no-results capture begin with `[[0`. The defensive `)]}'\n` strip in
+  `parseUgcUrlFromResponse` is harmless but never triggers in production.
+  Keeping it as cheap defense-in-depth; covers TheGreatRambler-style
+  `photometa` fallback if we ever need it (spec section 7.5).
+
+**Caveat:** these probes use the captured response token as a stable test
+fixture, NOT a live `getPanorama` call. The yaw assertion ("Maps JS
+normalizes `originHeading ≈ 0`") is inferred, not directly observed —
+it'll be verified-or-falsified once the extension hovers a real route in
+Chrome and the bridge logs `originHeading=` for the same panoid. If a real
+hover shows `originHeading != ~0`, the `routeHeading - originHeading`
+formula is still correct — it's just that `originHeading` would not be
+zero. Either way, the math is right.
+
 ## 7. Future improvements (deferred)
 
 Recorded here so they're not lost. Each is a v1.1+ candidate driven by
