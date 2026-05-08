@@ -110,6 +110,14 @@
   let panoLookupCounter = 0;
   let pendingPanoHeading = 0;
 
+  // UGC photosphere state — single-slot, NOT a multi-pano cache. Overwritten
+  // when the visible pano changes. Held so heading-update flows can rebuild
+  // the URL without re-fetching panorama metadata.
+  var lastUgcTokenBase = null;
+  var lastUgcOriginHeading = null;
+  var lastUgcOriginPitch = null;
+  var lastUgcCopyright = null;
+
   // Manual mode state
   let pendingLatLng = null;
   let requestIdCounter = 0;
@@ -990,8 +998,53 @@
   }
 
   function renderUgcPanorama(data, requestId) {
-    // Implemented in Task 11.
-    showPanoError({ error: 'ugc render not implemented yet', noCoverage: false });
+    lastUgcTokenBase = data.tokenBase;
+    lastUgcOriginHeading = data.originHeading || 0;
+    lastUgcOriginPitch = data.originPitch || 0;
+    lastUgcCopyright = data.copyright || '';
+
+    var url = RwgpsPhotospheres.buildUgcRenderUrl(
+      data.tokenBase,
+      pendingPanoHeading,
+      lastUgcOriginHeading,
+      lastUgcOriginPitch,
+      viewportW,
+      viewportH);
+
+    console.log('[RWGPS Street View] ugc pano',
+      data.panoid,
+      'originHeading=' + lastUgcOriginHeading.toFixed(1),
+      'originPitch=' + lastUgcOriginPitch.toFixed(2),
+      'yaw=' + (((pendingPanoHeading - lastUgcOriginHeading) % 360 + 360) % 360).toFixed(1),
+      'url=' + url);
+
+    var pid = ++preloadCounter;
+    var pre = new Image();
+    pre.onload = function () {
+      if (pid !== preloadCounter) return;     // stale (newer pano arrived)
+      clearTimeout(loadingSpinnerTimer);
+      hasLoadedImage = true;
+      overlayImg.src = url;
+      overlayImg.style.display = 'block';
+      overlayTilesEl.style.display = 'none';
+      loadingEl.style.display = 'none';
+      noCoverageEl.style.display = 'none';
+      if (lastUgcCopyright) {
+        copyrightEl.textContent = lastUgcCopyright;
+        copyrightEl.style.display = 'block';
+      } else {
+        copyrightEl.style.display = 'none';
+      }
+    };
+    pre.onerror = function () {
+      if (pid !== preloadCounter) return;
+      showPanoError({
+        error: 'gpms-cs-s image load failed',
+        errorClass: 'UGC_IMAGE_LOAD_FAIL',
+        noCoverage: false
+      });
+    };
+    pre.src = url;
   }
 
   function showPanoError(data) {
