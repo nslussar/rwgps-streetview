@@ -24,7 +24,7 @@ Requirements:
 * Google Maps must be selected as the map type in RideWithGPS
 * Google Maps API key with Street View Static API enabled (10k requests/month are free).
 
-Why a key? RideWithGPS's built-in Street View uses Google's free embed (iframe), which only supports discrete clicks, not continuous hover. To fetch a fresh image as your cursor moves, this extension uses Google's Street View Static API, which is keyed per user. The extension caches aggressively and skips redundant requests; the popup shows your monthly usage so you always know where you stand.
+The extension uses Google's Street View Static API, which requires an API key. RideWithGPS's own Street View integration uses Google's "embed" map, which is free but can't support hover functionality like this. To keep usage under the 10k/month free tier, this extension buckets nearby points for a better cache hit ratio, skips redundant requests, and throttles requests as the cursor moves. The popup shows current monthly usage.
 
 Fully open source under MIT license: https://github.com/nslussar/rwgps-streetview
 
