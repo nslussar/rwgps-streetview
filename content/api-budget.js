@@ -72,9 +72,11 @@
     send(RwgpsUsage.GEOCODE_MSG);
   }
 
-  window.RwgpsApiBudget = {
+  var api = {
     init: init,
     tryStreetView: tryStreetView,
     countGeocode: countGeocode
   };
+  window.RwgpsApiBudget = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

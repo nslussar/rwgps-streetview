@@ -130,6 +130,7 @@ ffprobe -v error -select_streams v:0 -show_entries frame=pts_time \
 ## Working on this codebase
 
 - No build step, no linter, no npm. `node --check <file>` is a quick syntax gate; `make test` runs the unit suite for `lib/`. For anything touching `content/`, `background.js`, or `popup/`, reload unpacked and verify in the browser.
+- `jsconfig.json` + `globals.d.ts` exist purely for editor/LSP help (not runtime). When adding a new IIFE-exposed global (`window.RwgpsFoo = ...` or `self.RwgpsFoo = ...`), expose it via `module.exports = api` at the bottom of the same file, then add a one-liner to `globals.d.ts`: `const RwgpsFoo: typeof import('./path/to/file.js');`. Without that, cross-file `findReferences` / `goToDefinition` won't follow the global.
 - The extension runs across three contexts that each have their own DevTools console:
   - Page console (RWGPS tab DevTools) — `[RWGPS Street View]` and the page-bridge logs
   - Service-worker console (`chrome://extensions` → "Service worker") — `[RWGPS SV bg]` logs
