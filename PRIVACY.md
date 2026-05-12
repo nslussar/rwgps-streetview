@@ -12,6 +12,10 @@
 
 None. This extension has no backend, no analytics, and no tracking.
 
+## Verbose console logging (opt-in)
+
+The extension's popup has an optional "Verbose console logging" toggle, off by default. When enabled, the extension writes additional diagnostic information — including the coordinates you hover over the route — to your browser's DevTools console. These logs stay local to your browser and are not transmitted anywhere by the extension. They only reach the developer if you choose to copy and share them (for example, when reporting a bug).
+
 ## Third-party services
 
 Google's Street View Static API is subject to [Google's Privacy Policy](https://policies.google.com/privacy). Requests to this API include the route coordinates you hover over and your API key.

@@ -828,10 +828,10 @@
                       return;
                     }
                     if (sis.ok) {
-                      console.log('[RWGPS SV Bridge] SIS rescue: unhandled panoType, falling back to error',
+                      vlog('[RWGPS SV Bridge] SIS rescue: unhandled panoType, falling back to error',
                         'req=' + reqId, 'type=' + sis.panoType);
                     } else {
-                      console.log('[RWGPS SV Bridge] SIS rescue: SIS also empty',
+                      vlog('[RWGPS SV Bridge] SIS rescue: SIS also empty',
                         'req=' + reqId,
                         'q=(' + msg.data.lat.toFixed(6) + ',' + msg.data.lng.toFixed(6) + ')',
                         'errorClass=' + sis.errorClass);

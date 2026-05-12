@@ -1094,8 +1094,8 @@
     copyrightEl.style.display = 'none';     // ensure attribution clears across renders
     loadingEl.style.display = 'none';
     if (data.errorClass) {
-      console.log('[RWGPS Street View] error',
-        data.errorClass + ':', data.error || '(no detail)');
+      console.log('[RWGPS Street View] error', data.errorClass);
+      if (data.error) vlog('[RWGPS Street View] error detail:', data.error);
     }
     noCoverageEl.textContent = panoErrorMessage(data);
     noCoverageEl.style.display = 'flex';
