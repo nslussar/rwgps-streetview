@@ -110,7 +110,7 @@ Maps JS `StreetViewService.getPanorama()` has a coord-specific stale-cache (or s
 ## Build and release
 
 - No build tools or npm — plain JavaScript
-- `make build` creates a zip in `build/` for Chrome Web Store upload
+- `make build` creates a zip in `build/` for Chrome Web Store upload. The zip's file list is **explicit** (not glob-based) — every new top-level file or directory referenced by `manifest.json` must be added to the `zip` invocation in the `Makefile`, or the Web Store will reject the package with `Could not load <thing> ''.` (1.1.0 shipped broken because `background.js` was added to the manifest but never to the zip list). When touching the manifest or adding a new asset, diff `unzip -l build/*.zip` against `manifest.json` references before tagging.
 - `make release` auto-bumps the patch version from the latest tag, creates the git tag, and pushes it to trigger the GitHub Actions release workflow
 - Release workflow sets `manifest.json` version from the git tag (manifest stores `0.0.0` as placeholder)
 - GitHub repo: https://github.com/nslussar/rwgps-streetview
@@ -155,3 +155,4 @@ ffprobe -v error -select_streams v:0 -show_entries frame=pts_time \
   When debugging cross-context behavior (counter discrepancies, message passing, cache accounting), add `console.log` on BOTH sides and watch BOTH consoles — the asymmetry between what each side sees is usually where the bug lives.
 - Don't theorize about Chrome internals; verify with a log. (The "`<img>` memory cache short-circuits webRequest" theory was wrong — bucketing was producing unstable URLs and webRequest was working fine.)
 - For popup UI changes, `design/handoff/SPEC.md` is the layout/copy source of truth and `design/handoff/popup-reference.html` is a runnable mockup of all 4 states. Where SPEC and behavior conflict, the extension wins — flag it.
+- No per-tab active/inactive toolbar icon. Considered (grayscale on non-RWGPS tabs) and dropped — clean implementation needs `tabs`/`webNavigation` permission (update re-prompt for existing users), zero-permission workaround flickers on intra-RWGPS navigation, and the icon is only visible to users who've pinned it. Revisit only if users ask.
