@@ -32,8 +32,9 @@
   // intentionally not auto-scaled — large buckets at low zoom would snap
   // requests onto neighboring streets / off-coverage spots.
   const PIXEL_FLOOR_SKIP = 5;
-  // streetviewpixels-pa tile endpoint (free, no API key). The endpoint exposes
-  // tile-grid levels via the `zoom` param. At each level the panorama is split
+  // streetviewpixels-pa tile endpoint — the panorama image tile URL used by
+  // the Maps JS street-view renderer. The endpoint exposes tile-grid levels
+  // via the `zoom` param. At each level the panorama is split
   // into `worldSize / (512 * 2^(5-zoom))` tiles per axis: zoom=5 → worldSize/512
   // (full res, 32×16 standard), zoom=4 → /1024 (16×8), zoom=3 → /2048 (8×4).
   // Tile pixels are always 512×512, so lower zoom = wider angular coverage per
@@ -44,7 +45,7 @@
   function worldDivisorForZoom(z) { return 512 * Math.pow(2, 5 - z); } // px per tile in worldSize space
   function defaultXTilesForZoom(z) { return 32 / Math.pow(2, 5 - z); } // standard SV-car horizontal grid
   function defaultYTilesForZoom(z) { return 16 / Math.pow(2, 5 - z); } // standard SV-car vertical grid
-  // Free-tile pipeline tunables exposed in the popup. Viewport size and
+  // Experimental preview tunables exposed in the popup. Viewport size and
   // per-tile pixel size trade FOV against detail (smaller tiles = more
   // panorama visible per viewport pixel); horizon nudge layers a fixed
   // pixel offset on top of the auto seam-row centering.
@@ -64,7 +65,7 @@
     return 'viewer';
   })();
   let previewEnabled = false; // set in init() based on mode + storage
-  let useFreeTilePipeline = true;
+  let useExperimentalPreview = false;
   let radius = DEFAULT_RADIUS;
   let bucketMeters = DEFAULT_BUCKET_METERS;
   let skipThresholdMeters = DEFAULT_SKIP_THRESHOLD_METERS;
@@ -78,7 +79,7 @@
   // behind this flag, toggled from the popup. Default off — useful when
   // investigating coverage gaps or wrong-address bugs.
   let debugEnabled = false;
-  // Cached values from the most recent free-tile render so we can re-apply
+  // Cached values from the most recent experimental-preview render so we can re-apply
   // the inner-div transform when only a tunable knob changes (no new pano).
   let lastFrac = null;
   let lastSeamWorldOffset = 0;
@@ -108,7 +109,7 @@
   let trackingActive = false;
   let trackingTimeout = null;
 
-  // Pano-lookup state for the free-tile pipeline. `pendingPanoHeading` is
+  // Pano-lookup state for the experimental preview. `pendingPanoHeading` is
   // safe as a single var because we only honor the response whose requestId
   // matches the latest counter — stale responses get dropped before the
   // heading is read.
@@ -144,13 +145,13 @@
 
   function init() {
     RwgpsApiBudget.init();
-    chrome.storage.sync.get(['apiKey', 'enabled', 'useFreeTilePipeline', 'radius', 'bucketMeters', 'skipThresholdMeters', 'dwellMs', 'viewportW', 'viewportH', 'tilePx', 'horizonNudgePx', 'previewEnabledViewer', 'verboseDebug'], function (result) {
+    chrome.storage.sync.get(['apiKey', 'enabled', 'useExperimentalPreview', 'radius', 'bucketMeters', 'skipThresholdMeters', 'dwellMs', 'viewportW', 'viewportH', 'tilePx', 'horizonNudgePx', 'previewEnabledViewer', 'verboseDebug'], function (result) {
       apiKey = result.apiKey || '';
       enabled = result.enabled !== false;
       previewEnabled = mode === 'viewer'
         ? result.previewEnabledViewer !== false  // viewer default: ON
         : false;                                 // editor: always OFF on load
-      useFreeTilePipeline = result.useFreeTilePipeline !== false; // default true
+      useExperimentalPreview = result.useExperimentalPreview === true; // default false (opt-in)
       radius = result.radius || DEFAULT_RADIUS;
       bucketMeters = numOr(result.bucketMeters, DEFAULT_BUCKET_METERS);
       skipThresholdMeters = numOr(result.skipThresholdMeters, DEFAULT_SKIP_THRESHOLD_METERS);
@@ -161,14 +162,14 @@
       horizonNudgePx = numOrSigned(result.horizonNudgePx, DEFAULT_HORIZON_NUDGE_PX);
       debugEnabled = !!result.verboseDebug;
 
-      if (!apiKey && !useFreeTilePipeline) {
-        console.log('[RWGPS Street View] No API key configured and free-tile pipeline disabled. Idle.');
+      if (!apiKey && !useExperimentalPreview) {
+        console.log('[RWGPS Street View] No API key configured and experimental preview disabled. Idle.');
         return;
       }
 
       if (!enabled) return;
 
-      if (apiKey && !useFreeTilePipeline) validateApiKey();
+      if (apiKey && !useExperimentalPreview) validateApiKey();
       injectBridge();
       createOverlay();
       registerKeyboardShortcuts();
@@ -181,10 +182,10 @@
         var hadKey = !!apiKey;
         apiKey = changes.apiKey.newValue || '';
         keyValid = null;
-        if (apiKey && !useFreeTilePipeline) validateApiKey();
+        if (apiKey && !useExperimentalPreview) validateApiKey();
         // If this is the first time an API key is set and we weren't already
-        // running (free-tile pipeline disabled), run full setup
-        if (!hadKey && apiKey && enabled && !bridgeReady && !useFreeTilePipeline) {
+        // running (experimental preview disabled), run full setup
+        if (!hadKey && apiKey && enabled && !bridgeReady && !useExperimentalPreview) {
           console.log('[RWGPS Street View] API key set, running late initialization');
           injectBridge();
           createOverlay();
@@ -193,12 +194,12 @@
           waitForMap();
         }
       }
-      if (changes.useFreeTilePipeline) {
-        var prev = useFreeTilePipeline;
-        useFreeTilePipeline = changes.useFreeTilePipeline.newValue !== false;
-        // Late init when enabling free pipeline without an API key set
-        if (!prev && useFreeTilePipeline && enabled && !bridgeReady) {
-          console.log('[RWGPS Street View] Free-tile pipeline enabled, running late initialization');
+      if (changes.useExperimentalPreview) {
+        var prev = useExperimentalPreview;
+        useExperimentalPreview = changes.useExperimentalPreview.newValue === true;
+        // Late init when enabling experimental preview without an API key set
+        if (!prev && useExperimentalPreview && enabled && !bridgeReady) {
+          console.log('[RWGPS Street View] Experimental preview enabled, running late initialization');
           injectBridge();
           createOverlay();
           registerKeyboardShortcuts();
@@ -266,7 +267,7 @@
   }
 
   function isOperational() {
-    return enabled && previewEnabled && (apiKey || useFreeTilePipeline);
+    return enabled && previewEnabled && (apiKey || useExperimentalPreview);
   }
 
   function setPreviewEnabled(value) {
@@ -339,7 +340,7 @@
     overlayEl.style.setProperty('--sv-tile-px', tilePx + 'px');
   }
 
-  // Re-apply the inner-tile-div transform from the most recent free-tile
+  // Re-apply the inner-tile-div transform from the most recent experimental-preview
   // render. Used when a tunable knob changes (tilePx / horizonNudgePx) so
   // the heading and horizon stay centered without waiting for a new pano.
   function applyTilesTransform() {
@@ -911,8 +912,8 @@
   }
 
   function updateStreetViewImage(lat, lng, heading) {
-    if (useFreeTilePipeline) {
-      updateStreetViewImageViaFreeTile(lat, lng, heading);
+    if (useExperimentalPreview) {
+      updateStreetViewImageViaExperimentalPreview(lat, lng, heading);
       return;
     }
     if (keyValid === false) {
@@ -984,9 +985,9 @@
     preload.src = url;
   }
 
-  // --- Free-tile pipeline (no API key, uses streetviewpixels-pa tile endpoint) ---
+  // --- Experimental preview path (uses Maps JS panorama image tiles) ---
 
-  function updateStreetViewImageViaFreeTile(lat, lng, heading) {
+  function updateStreetViewImageViaExperimentalPreview(lat, lng, heading) {
     var b = RwgpsGeo.bucketLatLng(lat, lng, bucketMeters);
     var h = RwgpsGeo.bucketHeading(heading, HEADING_BUCKET_DEG);
 

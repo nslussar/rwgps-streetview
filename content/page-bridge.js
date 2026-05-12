@@ -80,10 +80,11 @@
     return Promise.resolve(null);
   }
 
-  // SingleImageSearch RPC — used to extract the gpms-cs-s URL for type-10
-  // (UGC) panoramas. The endpoint is keyless; CORS-permissive from
-  // ridewithgps.com origin. See design spec section 4.2 for the request
-  // shape rationale.
+  // SingleImageSearch — the metadata search RPC used by the Maps JS
+  // streetView library when locating user-contributed (type-10) photospheres.
+  // Called directly here because the panorama tile endpoint doesn't serve
+  // type-10 captures, so we need the render URL from this response to draw
+  // them. See design spec section 4.2 for the request shape.
   var SINGLE_IMAGE_SEARCH_URL =
     'https://maps.googleapis.com/$rpc/google.internal.maps.mapsjs.v1.MapsJsInternalService/SingleImageSearch';
 
@@ -683,20 +684,17 @@
           var sourceVal = (lib.StreetViewSource && lib.StreetViewSource.OUTDOOR) || 'outdoor';
           opts.source = sourceVal;
 
-          // DIAGNOSTIC — Maps JS getPanorama is flaky: identical bucketed
-          // queries within a single session sometimes return ZERO_RESULTS and
-          // sometimes succeed. Static API at the same coords returns coverage,
-          // confirming the pano exists. Retry-with-logging distinguishes
-          // transient flakiness from genuine no-coverage. If retry success
-          // rate is high we'll either keep the retry or move to a different
-          // lookup path entirely. See logs tagged 'getPanorama retry'.
+          // Retry on transient ZERO_RESULTS. getPanorama can return
+          // ZERO_RESULTS during map initialization or under racy lookup
+          // conditions even when the panorama exists; the same query
+          // typically succeeds on a subsequent attempt.
           var MAX_RETRIES = 2;
           var RETRY_DELAY_MS = 300;
           var attemptNum = 0;
 
           function doLookup() {
-            // Fresh StreetViewService per attempt — in case Maps JS holds
-            // internal state per-instance that contributes to flakiness.
+            // Fresh StreetViewService per attempt to avoid any
+            // per-instance state from a previous failed attempt.
             var svc = new lib.StreetViewService();
             svc.getPanorama(opts)
               .then(async function (res) {
@@ -792,14 +790,12 @@
                     'q=(' + msg.data.lat.toFixed(6) + ',' + msg.data.lng.toFixed(6) + ')');
                 }
 
-                // SIS RESCUE — after getPanorama exhausts retries on a
-                // ZERO_RESULTS, fall through to SingleImageSearch as the
-                // metadata source. SIS hits a different backend and reliably
-                // finds the panos getPanorama is stale-caching out. If SIS
-                // returns a type-10 (UGC) pano, build a synthetic PANO_INFO
-                // and route through the existing UGC render path. For other
-                // outcomes (SIS empty, unhandled type) we fall back to the
-                // original ZERO_RESULTS error.
+                // SIS rescue — if getPanorama returns ZERO_RESULTS after
+                // retries, fall through to SingleImageSearch as the
+                // metadata source. If SIS returns a type-10 (UGC) pano,
+                // build a synthetic PANO_INFO and route through the
+                // existing UGC render path. Other outcomes (SIS empty,
+                // unhandled type) report the original ZERO_RESULTS error.
                 if (noCoverage) {
                   singleImageSearch(msg.data.lat, msg.data.lng, radius).then(function (sis) {
                     if (sis.ok && sis.panoType === 10) {

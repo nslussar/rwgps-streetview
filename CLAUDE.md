@@ -4,10 +4,10 @@
 
 Chrome extension (Manifest V3) that shows a Google Street View overlay when hovering over routes on ridewithgps.com. Works when Google Maps is selected as the map type in the RWGPS route editor.
 
-Two image pipelines, switchable via the popup's top-of-screen toggle (`useFreeTilePipeline` in `chrome.storage.sync`, default `true`):
+Two image pipelines, switchable via the popup's top-of-screen toggle (`useExperimentalPreview` in `chrome.storage.sync`, default `false` — opt-in). Internally the experimental path is still called the "free-tile" path in some variable names and design docs; the `useExperimentalPreview` rename is the user-facing/CWS-review-facing framing:
 
-- **Free-tile pipeline (default).** Uses `streetviewpixels-pa.googleapis.com/v1/tile` — the same un-keyed endpoint Google's pegman drag-preview uses. No API key, no Google Cloud project, no monthly cap. 3×2 stitched tile grid (4 of which are usually visible) with sub-tile horizontal centering on the route heading. Design source of truth: `docs/design/streetviewpixels/README.md`.
-- **Static API pipeline (kill-switch fallback).** Falls back to `maps.googleapis.com/maps/api/streetview` with the user's API key, gated by a configurable monthly cap. Original v1 path; preserved so the user can flip back if the free pipeline misbehaves on a route.
+- **Static API pipeline (default).** Uses `maps.googleapis.com/maps/api/streetview` with the user's API key, gated by a configurable monthly cap. The originally shipped v1 path and what every CWS-approved release through v1.1.1 has run on. Solid, long-term stable.
+- **Experimental preview pipeline (opt-in).** Uses `streetviewpixels-pa.googleapis.com/v1/tile` — the panorama image tile endpoint the Maps JS street-view renderer pulls from. 3×2 stitched tile grid (4 of which are usually visible) with sub-tile horizontal centering on the route heading. Design source of truth: `docs/design/streetviewpixels/README.md`. Default off because the endpoint is internal-ish and at risk of breakage; user must opt in via popup checkbox.
 
 ## Architecture
 
@@ -22,7 +22,7 @@ Three execution contexts:
   - Handles pixel-to-latlng conversion, reverse geocoding, and **panorama lookup** (`LOOKUP_PANO` request → `PANO_INFO` response with panoid + originHeading + worldSize, or `kind:'ugc'` with `tokenBase` for type-10). Panorama lookup uses `StreetViewService.getPanorama({source: OUTDOOR})` resolved via `getStreetViewLib()` which handles both the legacy `google.maps.StreetViewService` global and the new dynamic `google.maps.importLibrary('streetView')` pattern. `OUTDOOR` admits both Google SV-car captures (type-2) and user-contributed photospheres (type-10); for type-10 the bridge then calls `SingleImageSearch` to extract a `gpms-cs-s` render URL. See the "Lookup reliability" section below for the retry + SIS-rescue layer that papers over Maps JS `getPanorama` flakiness.
 - **Content script** (`content/content.js`) — Runs in the ISOLATED world.
   - Manages overlay DOM. Two image-rendering paths share the same overlay container:
-    - **Free-tile path** renders into a 3×2 `<img>` grid (`.sv-tiles` div with 6 children) — leftX/midX/rightX columns × yTop/yBot rows. The inner div is positioned with `top:-75px` (the rendered seam at viewport vertical center), and JS sets `transform: translateX(-200 * frac) translateY(-horizonOffsetPx)` per render — the X shift centers the heading horizontally; the Y shift compensates when the chosen seam row isn't exactly at the panorama's vertical center (non-integer `yTiles`, e.g. trekker 13×7s).
+    - **Experimental preview path** renders into a 3×2 `<img>` grid (`.sv-tiles` div with 6 children) — leftX/midX/rightX columns × yTop/yBot rows. The inner div is positioned with `top:-75px` (the rendered seam at viewport vertical center), and JS sets `transform: translateX(-200 * frac) translateY(-horizonOffsetPx)` per render — the X shift centers the heading horizontally; the Y shift compensates when the chosen seam row isn't exactly at the panorama's vertical center (non-integer `yTiles`, e.g. trekker 13×7s).
     - **Static API path** renders into the single direct-child `<img>`. Each path hides the other on swap.
   - Two modes switch dynamically: **tracking mode** (piggybacks on RWGPS's hover marker) and **manual mode** (own pixel-to-latlng + nearest-point calculation)
   - RWGPS destroys and recreates the tracking marker when cursor leaves/returns to the route
@@ -64,7 +64,7 @@ Supporting files:
 - **`chrome.webRequest` permissions gotcha**: webRequest events fire only when the extension has `host_permissions` for BOTH the destination URL AND the initiator page. Manifest declares both `https://maps.googleapis.com/*` and `https://ridewithgps.com/*` for this reason — `content_scripts.matches` is NOT a substitute despite chrome://extensions UI conflating them under "Site access".
 - **Popup error signals** (written by `background.js`, read by `popup.js`): `apiKeyInvalid` (sticky bool in `chrome.storage.local`, set on 403 REQUEST_DENIED, cleared on next 2xx) drives the invalid-key state. `rateLimitedAt` (timestamp, throttled to one write per 5s) drives the transient rate-limit notice (popup hides after 60s). Both rely on `&return_error_code=true` so Google returns 403/429 directly instead of an opaque "generic error" PNG.
 
-## Free-tile pipeline (`streetviewpixels-pa`)
+## Experimental preview pipeline (`streetviewpixels-pa`)
 
 The default path. Bypasses the Street View Static API and uses the same un-keyed tile endpoint Google's pegman drag-preview hits. **Anything reached via "normal interaction" with the loaded Maps JS API is free** — `StreetViewService.getPanorama()` for metadata + `streetviewpixels-pa.googleapis.com/v1/tile` for image tiles. No API key in URLs, CORS-enabled, paid by neither us nor RWGPS (it's an intrinsic Maps JS feature).
 
@@ -100,11 +100,11 @@ Maps JS `StreetViewService.getPanorama()` has a coord-specific stale-cache (or s
 
 **SIS-primary is the next iteration.** Steady-state latency would drop from ~1s on rescue cases to ~150 ms across the board. Deferred because (a) type-2 SV-car panos haven't been verified through SIS (we have UGC-heavy test routes), and (b) defense in depth — if SIS protocol shifts, `getPanorama` still works for the 88% non-rescue case. See the addendum in the photospheres spec for the migration sketch.
 
-## Open follow-ups (free-tile pipeline)
+## Open follow-ups (experimental preview pipeline)
 
 - **Strip debug tile borders** in `overlay.css`.
-- **Popup state machine isn't reshaped yet.** The FIRSTRUN screen still demands an API key when none is set. With the free-tile toggle defaulting to ON, that screen is technically irrelevant — but the toggle sits above it in the popup, so users can ignore the firstrun ask. Cleanup task: remove the FIRSTRUN demand path entirely once the free pipeline proves out.
-- **Cap UI / counter UI is still rendered** but sits at zero in free-tile mode. Static-API path still depends on it; only strip after deciding to retire that path.
+- **Popup state machine.** The FIRSTRUN screen still demands an API key when none is set. With the experimental toggle defaulting to OFF (opt-in) the FIRSTRUN flow is the correct primary onboarding — leave as is.
+- **Cap UI / counter UI** is the canonical default-mode UX, since the experimental path is opt-in and the API-key path remains the primary supported behavior. No work needed here.
 - **Heading granularity is still ±1 tile worth** at panorama level — for non-standard panoramas with fewer tiles per 360°, individual tiles cover MORE degrees, so visible bias may grow. Sub-tile shift compensates the residual within a tile, but at the *seam between two panoramas* with mismatched coverage there's no fix short of zoom=5 (16 tiles per render — too many requests).
 
 ## Build and release

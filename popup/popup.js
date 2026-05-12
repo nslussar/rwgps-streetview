@@ -62,7 +62,7 @@ document.addEventListener('DOMContentLoaded', function () {
   var previewToggleLabelEl = $('previewToggleLabel');
   var previewMode = null; // 'editor' | 'viewer' | null (no content script — popup writes storage directly)
 
-  var useFreeTilePipelineInput = $('useFreeTilePipeline');
+  var useExperimentalPreviewInput = $('useExperimentalPreview');
   var verboseDebugInput = $('verboseDebug');
   var viewportWInput = $('viewportW');
   var viewportHInput = $('viewportH');
@@ -206,7 +206,7 @@ document.addEventListener('DOMContentLoaded', function () {
   chrome.storage.sync.get(
     ['apiKey', 'radius', 'apiCap', 'apiCapEnabled',
      'bucketMeters', 'skipThresholdMeters', 'dwellMs',
-     'popupAdvancedExpanded', 'useFreeTilePipeline', 'verboseDebug',
+     'popupAdvancedExpanded', 'useExperimentalPreview', 'verboseDebug',
      'viewportW', 'viewportH', 'tilePx', 'horizonNudgePx'],
     function (result) {
       state.apiKey = result.apiKey || '';
@@ -221,7 +221,7 @@ document.addEventListener('DOMContentLoaded', function () {
       apiCapInput.value = state.cap;
       apiCapEnabledInput.checked = state.capEnabled;
       state.advancedExpanded = !!result.popupAdvancedExpanded;
-      useFreeTilePipelineInput.checked = result.useFreeTilePipeline !== false; // default true
+      useExperimentalPreviewInput.checked = result.useExperimentalPreview === true; // default false (opt-in)
       verboseDebugInput.checked = !!result.verboseDebug; // default false
       viewportWInput.value = numOr(result.viewportW, DEFAULT_VIEWPORT_W);
       viewportHInput.value = numOr(result.viewportH, DEFAULT_VIEWPORT_H);
@@ -231,8 +231,8 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   );
 
-  useFreeTilePipelineInput.addEventListener('change', function () {
-    chrome.storage.sync.set({ useFreeTilePipeline: useFreeTilePipelineInput.checked });
+  useExperimentalPreviewInput.addEventListener('change', function () {
+    chrome.storage.sync.set({ useExperimentalPreview: useExperimentalPreviewInput.checked });
   });
 
   verboseDebugInput.addEventListener('change', function () {

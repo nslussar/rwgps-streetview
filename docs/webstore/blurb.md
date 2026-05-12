@@ -30,3 +30,25 @@ Fully open source under MIT license: https://github.com/nslussar/rwgps-streetvie
 
 Recent changes:
 * ...
+
+# Permission justification (webstore)
+
+## Storage justification
+
+Used to persist the user's Google Maps API key, overlay enabled/disabled toggle, and user preferences (Street View search radius, dwell delay, request bucketing/skip thresholds, monthly request cap) across sessions via chrome.storage.sync, and to maintain monthly Street View API usage counters and per-tab session counters via chrome.storage.local and chrome.storage.session for the in-popup usage meter and cap enforcement. 
+
+No browsing history, page contents, or personal data are stored.
+
+## webRequest justification
+
+Used to observe completed Street View Static API requests to maps.googleapis.com so the extension can accurately count monthly API usage and distinguish browser-cache hits (not billed) from network requests (billed). This powers the in-popup usage meter and the user-configurable monthly cap that prevents unexpected API charges. The extension only reads request metadata (URL and fromCache flag) via webRequest.onCompleted. 
+
+The extension does not block, redirect, or modify any requests, and does not read response bodies.
+
+## Host permissions justification
+
+* ridewithgps.com: content scripts read route polyline coordinates and show a Street View overlay on hover. 
+
+* maps.googleapis.com: fetch Street View Static images using the user's Google Maps API key and observe completed requests to count monthly usage. 
+
+Both are required because webRequest only fires when the extension has host permissions for both the initiator page and the destination.

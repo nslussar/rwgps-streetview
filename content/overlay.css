@@ -24,7 +24,7 @@
   display: block;
 }
 
-/* Free-tile path: 3×2 grid of 512×512 tiles displayed at --sv-tile-px each.
+/* Experimental preview path: 3×2 grid of 512×512 tiles displayed at --sv-tile-px each.
    Inner box is anchored so its center sits at the viewport center; JS applies
    translateX/Y to nudge the route heading to viewport-center horizontally and
    the panorama horizon to viewport-center vertically. */

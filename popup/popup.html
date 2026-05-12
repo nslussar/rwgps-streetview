@@ -33,13 +33,20 @@
     </button>
   </div>
 
-  <!-- Free-tile pipeline toggle (kill switch). Functional, not styled. -->
-  <div style="padding:8px 12px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;gap:8px;font-size:12px">
-    <input type="checkbox" id="useFreeTilePipeline" style="margin:0">
-    <label for="useFreeTilePipeline" style="cursor:pointer">Use free tile pipeline (no API key needed)</label>
+  <!-- Experimental preview toggle (opt-in). Functional, not styled. -->
+  <div style="padding:8px 12px;border-bottom:1px solid #e5e7eb;display:flex;align-items:flex-start;gap:8px;font-size:12px">
+    <input type="checkbox" id="useExperimentalPreview" style="margin:3px 0 0 0">
+    <label for="useExperimentalPreview" style="cursor:pointer;flex:1">
+      <div>Experimental preview — no API key required</div>
+      <div style="font-size:11px;color:#666;margin-top:2px;line-height:1.4">
+        Uses the Maps JS panorama image endpoint directly. Some captures
+        (user-contributed photospheres on bike trails) are not supported
+        in this mode — provide an API key above for full coverage.
+      </div>
+    </label>
   </div>
 
-  <!-- Free-tile pipeline tunables. Functional, not styled.
+  <!-- Experimental preview tunables. Functional, not styled.
        Reset buttons (data-reset="<key>") delete the storage.sync key so
        content.js falls back to its default. -->
   <div style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:12px;display:grid;grid-template-columns:1fr 1fr;gap:6px 12px">
