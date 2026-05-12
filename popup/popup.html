@@ -46,10 +46,8 @@
     </label>
   </div>
 
-  <!-- Experimental preview tunables. Functional, not styled.
-       Reset buttons (data-reset="<key>") delete the storage.sync key so
-       content.js falls back to its default. -->
-  <div style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:12px;display:grid;grid-template-columns:1fr 1fr;gap:6px 12px">
+  <!-- Dev/debug only — hidden in UI, plumbing still wired. -->
+  <div style="display:none;padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:12px;grid-template-columns:1fr 1fr;gap:6px 12px">
     <label style="display:flex;align-items:center;gap:6px">
       <span style="flex:1">Viewport width</span>
       <input type="number" id="viewportW" min="200" max="900" step="10" style="width:56px">
