@@ -744,25 +744,39 @@
             var streetName = '';
             var city = '';
             if (status === 'OK' && results && results.length > 0) {
-              // Extract components from the most specific result
+              // Prefer a result whose own top-level type is "route" — that's
+              // the named road or trail at this lat/lng (e.g. "Olympic
+              // Discovery Trail"). Without this preference, a closer postal
+              // address result wins and we end up labeling a trail point
+              // with the parallel road's name because street_address results
+              // expose `route` in their address_components too.
+              var pick = null;
               for (var i = 0; i < results.length; i++) {
-                var comps = results[i].address_components;
-                for (var j = 0; j < comps.length; j++) {
-                  var types = comps[j].types;
-                  if (!streetNumber && types.indexOf('street_number') !== -1) {
-                    streetNumber = comps[j].long_name;
-                  }
-                  if (!streetName && types.indexOf('route') !== -1) {
-                    streetName = comps[j].long_name;
-                  }
-                  if (!city && types.indexOf('locality') !== -1) {
-                    city = comps[j].long_name;
-                  }
+                if ((results[i].types || []).indexOf('route') !== -1) {
+                  pick = results[i];
+                  break;
                 }
-                if (streetName) break;
+              }
+              if (!pick) pick = results[0];
+              var pickIsRoute = (pick.types || []).indexOf('route') !== -1;
+              var comps = pick.address_components || [];
+              for (var j = 0; j < comps.length; j++) {
+                var types = comps[j].types;
+                // Skip the street number when we picked a route-typed result
+                // — a trail name doesn't take a house number prefix.
+                if (!pickIsRoute && !streetNumber && types.indexOf('street_number') !== -1) {
+                  streetNumber = comps[j].long_name;
+                }
+                if (!streetName && types.indexOf('route') !== -1) {
+                  streetName = comps[j].long_name;
+                }
+                if (!city && types.indexOf('locality') !== -1) {
+                  city = comps[j].long_name;
+                }
               }
             }
-            // Build label: "123 Main St, Portland" or "Main St, Portland" or "Main St"
+            // Build label: "123 Main St, Portland" / "Main St, Portland" /
+            // "Olympic Discovery Trail, Sequim" / "Main St"
             var label = '';
             if (streetName) {
               label = streetNumber ? streetNumber + ' ' + streetName : streetName;
