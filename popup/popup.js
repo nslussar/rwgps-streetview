@@ -63,6 +63,7 @@ document.addEventListener('DOMContentLoaded', function () {
   var previewMode = null; // 'editor' | 'viewer' | null (no content script — popup writes storage directly)
 
   var useFreeTilePipelineInput = $('useFreeTilePipeline');
+  var verboseDebugInput = $('verboseDebug');
   var viewportWInput = $('viewportW');
   var viewportHInput = $('viewportH');
   var tilePxInput = $('tilePx');
@@ -205,7 +206,7 @@ document.addEventListener('DOMContentLoaded', function () {
   chrome.storage.sync.get(
     ['apiKey', 'radius', 'apiCap', 'apiCapEnabled',
      'bucketMeters', 'skipThresholdMeters', 'dwellMs',
-     'popupAdvancedExpanded', 'useFreeTilePipeline',
+     'popupAdvancedExpanded', 'useFreeTilePipeline', 'verboseDebug',
      'viewportW', 'viewportH', 'tilePx', 'horizonNudgePx'],
     function (result) {
       state.apiKey = result.apiKey || '';
@@ -221,6 +222,7 @@ document.addEventListener('DOMContentLoaded', function () {
       apiCapEnabledInput.checked = state.capEnabled;
       state.advancedExpanded = !!result.popupAdvancedExpanded;
       useFreeTilePipelineInput.checked = result.useFreeTilePipeline !== false; // default true
+      verboseDebugInput.checked = !!result.verboseDebug; // default false
       viewportWInput.value = numOr(result.viewportW, DEFAULT_VIEWPORT_W);
       viewportHInput.value = numOr(result.viewportH, DEFAULT_VIEWPORT_H);
       tilePxInput.value = numOr(result.tilePx, DEFAULT_TILE_PX);
@@ -231,6 +233,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
   useFreeTilePipelineInput.addEventListener('change', function () {
     chrome.storage.sync.set({ useFreeTilePipeline: useFreeTilePipelineInput.checked });
+  });
+
+  verboseDebugInput.addEventListener('change', function () {
+    chrome.storage.sync.set({ verboseDebug: verboseDebugInput.checked });
   });
 
   // ---- Preview on/off toggle ----
@@ -484,6 +490,7 @@ document.addEventListener('DOMContentLoaded', function () {
       if (changes.viewportH) syncInputValue(viewportHInput, numOr(changes.viewportH.newValue, DEFAULT_VIEWPORT_H));
       if (changes.tilePx) syncInputValue(tilePxInput, numOr(changes.tilePx.newValue, DEFAULT_TILE_PX));
       if (changes.horizonNudgePx) syncInputValue(horizonNudgePxInput, numOrSigned(changes.horizonNudgePx.newValue, DEFAULT_HORIZON_NUDGE_PX));
+      if (changes.verboseDebug) verboseDebugInput.checked = !!changes.verboseDebug.newValue;
       // Mirror viewer-mode preview toggles. Editor-mode state lives only in
       // the content script's memory so there's no storage event to listen for.
       // Mirror viewer-mode and storage-fallback states. Editor-mode is the

@@ -73,6 +73,11 @@
   let viewportH = DEFAULT_VIEWPORT_H;
   let tilePx = DEFAULT_TILE_PX;
   let horizonNudgePx = DEFAULT_HORIZON_NUDGE_PX;
+  // Per-lookup diagnostic logs (lookup-pano, ugc pano, pano geometry, plus
+  // the bridge-side retry / SIS-rescue / reverse-geocode dumps) are gated
+  // behind this flag, toggled from the popup. Default off — useful when
+  // investigating coverage gaps or wrong-address bugs.
+  let debugEnabled = false;
   // Cached values from the most recent free-tile render so we can re-apply
   // the inner-div transform when only a tunable knob changes (no new pano).
   let lastFrac = null;
@@ -139,7 +144,7 @@
 
   function init() {
     RwgpsApiBudget.init();
-    chrome.storage.sync.get(['apiKey', 'enabled', 'useFreeTilePipeline', 'radius', 'bucketMeters', 'skipThresholdMeters', 'dwellMs', 'viewportW', 'viewportH', 'tilePx', 'horizonNudgePx', 'previewEnabledViewer'], function (result) {
+    chrome.storage.sync.get(['apiKey', 'enabled', 'useFreeTilePipeline', 'radius', 'bucketMeters', 'skipThresholdMeters', 'dwellMs', 'viewportW', 'viewportH', 'tilePx', 'horizonNudgePx', 'previewEnabledViewer', 'verboseDebug'], function (result) {
       apiKey = result.apiKey || '';
       enabled = result.enabled !== false;
       previewEnabled = mode === 'viewer'
@@ -154,6 +159,7 @@
       viewportH = numOr(result.viewportH, DEFAULT_VIEWPORT_H);
       tilePx = numOr(result.tilePx, DEFAULT_TILE_PX);
       horizonNudgePx = numOrSigned(result.horizonNudgePx, DEFAULT_HORIZON_NUDGE_PX);
+      debugEnabled = !!result.verboseDebug;
 
       if (!apiKey && !useFreeTilePipeline) {
         console.log('[RWGPS Street View] No API key configured and free-tile pipeline disabled. Idle.');
@@ -239,6 +245,10 @@
         horizonNudgePx = numOrSigned(changes.horizonNudgePx.newValue, DEFAULT_HORIZON_NUDGE_PX);
         applyTilesTransform();
       }
+      if (changes.verboseDebug) {
+        debugEnabled = !!changes.verboseDebug.newValue;
+        sendDebugToBridge();
+      }
     });
 
     // Popup ↔ content-script bridge for the preview-toggle button. Editor-mode
@@ -303,6 +313,20 @@
     return (typeof v === 'number' && v >= 0) ? v : fallback;
   }
 
+  function vlog() {
+    if (!debugEnabled) return;
+    console.log.apply(console, arguments);
+  }
+
+  function sendDebugToBridge() {
+    if (!bridgeReady) return;
+    window.postMessage({
+      type: PREFIX + 'REQUEST',
+      action: 'SET_DEBUG',
+      data: { enabled: debugEnabled }
+    }, '*');
+  }
+
   // Signed variant for tunables that accept negative values (e.g. horizon nudge).
   function numOrSigned(v, fallback) {
     return (typeof v === 'number' && isFinite(v)) ? v : fallback;
@@ -348,7 +372,7 @@
       + '&radius=1000'
       + '&key=' + encodeURIComponent(apiKey)
       + '&return_error_code=true';
-    console.log('[RWGPS Street View] Validating API key, test URL: ' + redactKey(testUrl));
+    vlog('[RWGPS Street View] Validating API key, test URL: ' + redactKey(testUrl));
     var testImg = new Image();
     testImg.onload = function () {
       keyValid = true;
@@ -526,13 +550,14 @@
   function onBridgeReady() {
     if (bridgeReady) return;
     bridgeReady = true;
+    sendDebugToBridge();
     requestRouteCoords();
     attachMouseListeners();
 
     // Wait 10s for tracking mode to activate; if not, fall back to manual
     trackingTimeout = setTimeout(function () {
       if (lastActiveMode !== 'tracking') {
-        console.log('[RWGPS Street View] Tracking marker not detected, using manual mode');
+        vlog('[RWGPS Street View] Tracking marker not detected, using manual mode');
       }
     }, 10000);
   }
@@ -718,7 +743,7 @@
     trackingDeactivateTimer = null;
     cancelLingerTimer();
     if (lastActiveMode !== 'tracking') {
-      console.log('[RWGPS Street View] Switched to RWGPS tracking mode');
+      vlog('[RWGPS Street View] Switched to RWGPS tracking mode');
       lastActiveMode = 'tracking';
     }
 
@@ -767,7 +792,7 @@
 
     cancelLingerTimer();
     if (lastActiveMode !== 'manual') {
-      console.log('[RWGPS Street View] Switched to manual mode');
+      vlog('[RWGPS Street View] Switched to manual mode');
       lastActiveMode = 'manual';
     }
 
@@ -981,7 +1006,7 @@
       }, 500);
     }
 
-    console.log('[RWGPS Street View] lookup-pano req=' + id,
+    vlog('[RWGPS Street View] lookup-pano req=' + id,
       'bucketed=(' + b.lat.toFixed(6) + ',' + b.lng.toFixed(6) + ')',
       'raw=(' + lat.toFixed(6) + ',' + lng.toFixed(6) + ')',
       'r=' + radius + 'm');
@@ -1021,7 +1046,7 @@
           { lat: data.queryLat, lng: data.queryLng },
           { lat: data.snappedLat, lng: data.snappedLng }).toFixed(1)
       : '?';
-    console.log('[RWGPS Street View] ugc pano',
+    vlog('[RWGPS Street View] ugc pano',
       data.panoid,
       'originHeading=' + lastUgcOriginHeading.toFixed(1),
       'originPitch=' + lastUgcOriginPitch.toFixed(2),
@@ -1147,7 +1172,7 @@
     // pixel shift if tilePx or horizonNudgePx change after this render.
     var seamWorldOffset = (horizonWorldY - seamRow * divisor) / divisor;
     var horizonOffsetPx = seamWorldOffset * tilePx;
-    console.log('[RWGPS Street View] pano',
+    vlog('[RWGPS Street View] pano',
       data.panoid,
       'worldSize=' + (data.worldSize ? data.worldSize.width + 'x' + data.worldSize.height : 'null'),
       'tiles=' + xTiles + 'x' + yTiles,

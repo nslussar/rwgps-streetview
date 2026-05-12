@@ -17,6 +17,11 @@
   let trackingMarker = null;
   let markerMoveCounts = new Map(); // marker -> {count, lastTime}
   let currentZoom = null;
+  // Forwarded from the content script via SET_DEBUG (the bridge runs in MAIN
+  // world and can't read chrome.storage itself). Gates per-lookup retry /
+  // error-dump / SIS-rescue / reverse-geocode diagnostics. Always-on bridge
+  // events (constructor hooks, map-ready, projection-helper) keep using log().
+  var debugEnabled = false;
 
   function debounce(fn, ms) {
     let timer;
@@ -30,11 +35,19 @@
     console.log('[RWGPS SV Bridge] ' + msg);
   }
 
+  function vlog() {
+    if (!debugEnabled) return;
+    console.log.apply(console, arguments);
+  }
+
   function tryGetMapFrom(obj, label) {
     if (map) return;
     try {
       var m = obj.getMap();
-      if (m) { log('Map found via ' + label); onMapFound(m); }
+      if (m) {
+        vlog('[RWGPS SV Bridge] Map found via ' + label);
+        onMapFound(m);
+      }
     } catch (e) { /* ignore */ }
   }
 
@@ -204,7 +217,7 @@
     const OrigMap = google.maps.Map;
     google.maps.Map = function (div, opts) {
       const instance = Reflect.construct(OrigMap, [div, opts], google.maps.Map);
-      log('Map constructor intercepted');
+      vlog('[RWGPS SV Bridge] Map constructor intercepted');
       onMapFound(instance);
       return instance;
     };
@@ -215,7 +228,7 @@
     const OrigPolyline = google.maps.Polyline;
     google.maps.Polyline = function (opts) {
       const instance = Reflect.construct(OrigPolyline, [opts], google.maps.Polyline);
-      log('Polyline constructor intercepted');
+      vlog('[RWGPS SV Bridge] Polyline constructor intercepted');
       trackPolyline(instance);
       return instance;
     };
@@ -228,7 +241,7 @@
     google.maps.Polyline.prototype.setMap = function (mapInstance) {
       origPolySetMap.call(this, mapInstance);
       if (mapInstance && !map) {
-        log('Map found via Polyline.setMap');
+        vlog('[RWGPS SV Bridge] Map found via Polyline.setMap');
         onMapFound(mapInstance);
       }
     };
@@ -267,13 +280,13 @@
     const origGetBounds = google.maps.Map.prototype.getBounds;
     google.maps.Map.prototype.getBounds = function () {
       if (!map) {
-        log('Map found via getBounds hook');
+        vlog('[RWGPS SV Bridge] Map found via getBounds hook');
         onMapFound(this);
       }
       return origGetBounds.call(this);
     };
 
-    log('Constructor hooks installed');
+    vlog('[RWGPS SV Bridge] Constructor hooks installed');
   }
 
   function onMarkerMoved(marker, latlng) {
@@ -306,7 +319,7 @@
 
     if (isRapid) {
       if (trackingMarker !== marker) {
-        log('Identified RWGPS tracking marker (moved ' + info.count + ' times in ' + (now - info.firstSeen) + 'ms)');
+        vlog('[RWGPS SV Bridge] Identified RWGPS tracking marker (moved ' + info.count + ' times in ' + (now - info.firstSeen) + 'ms)');
       }
       trackingMarker = marker;
       markerMoveCounts.clear();
@@ -326,14 +339,14 @@
 
     const gmStyle = document.querySelector('.gm-style');
     if (!gmStyle) {
-      log('scanForExistingMap: no .gm-style element found');
+      vlog('[RWGPS SV Bridge] scanForExistingMap: no .gm-style element found');
       return false;
     }
 
     const mapDiv = gmStyle.parentElement;
     if (!mapDiv) return false;
 
-    log('scanForExistingMap: found map div, checking __gm=' + !!mapDiv.__gm);
+    vlog('[RWGPS SV Bridge] scanForExistingMap: found map div, checking __gm=' + !!mapDiv.__gm);
 
     // Google Maps stores __gm on the map div
     if (mapDiv.__gm) {
@@ -345,7 +358,7 @@
         for (const key of Object.keys(gm)) {
           const val = gm[key];
           if (val && typeof val.getZoom === 'function' && typeof val.getBounds === 'function') {
-            log('Found existing Map via __gm.' + key);
+            vlog('[RWGPS SV Bridge] Found existing Map via __gm.' + key);
             onMapFound(val);
             return true;
           }
@@ -361,7 +374,7 @@
             typeof val.getZoom === 'function' &&
             typeof val.getBounds === 'function' &&
             typeof val.getDiv === 'function') {
-          log('Found existing Map via div property: ' + key);
+          vlog('[RWGPS SV Bridge] Found existing Map via div property: ' + key);
           onMapFound(val);
           return true;
         }
@@ -390,7 +403,7 @@
         for (const item of obj) {
           if (item && typeof item.getPath === 'function' && typeof item.getMap === 'function') {
             if (!polylines.includes(item)) {
-              log('Found existing Polyline via scan');
+              vlog('[RWGPS SV Bridge] Found existing Polyline via scan');
               trackPolyline(item);
             }
           }
@@ -456,7 +469,7 @@
       log('Cannot extract route ID from URL');
       return;
     }
-    log('Fetching route coords from API for route ' + routeId);
+    vlog('[RWGPS SV Bridge] Fetching route coords from API for route ' + routeId);
 
     fetch('/routes/' + routeId + '.json')
       .then(function (r) {
@@ -517,7 +530,7 @@
     const overlay = new google.maps.OverlayView();
     overlay.onAdd = function () {
       overlayProjection = this.getProjection();
-      log('Projection helper ready');
+      vlog('[RWGPS SV Bridge] Projection helper ready');
     };
     overlay.draw = function () {
       overlayProjection = this.getProjection();
@@ -557,7 +570,7 @@
 
   const debouncedRouteUpdate = debounce(function () {
     const coords = extractRouteCoords();
-    log('Route update: ' + coords.length + ' polylines, ' +
+    vlog('[RWGPS SV Bridge] Route update: ' + coords.length + ' polylines, ' +
         coords.reduce(function (s, c) { return s + c.length; }, 0) + ' points');
     // Don't send empty updates if we have API-fetched coords
     if (coords.length === 0 && apiRouteCoords) return;
@@ -688,7 +701,7 @@
             svc.getPanorama(opts)
               .then(async function (res) {
                 if (attemptNum > 0) {
-                  console.log('[RWGPS SV Bridge] getPanorama retry SUCCESS',
+                  vlog('[RWGPS SV Bridge] getPanorama retry SUCCESS',
                     'req=' + reqId,
                     'attempt=' + (attemptNum + 1) + '/' + (MAX_RETRIES + 1),
                     'q=(' + msg.data.lat.toFixed(6) + ',' + msg.data.lng.toFixed(6) + ')');
@@ -753,7 +766,7 @@
                   // considered, even on ZERO_RESULTS). If endLocation is
                   // near our query, the backend knows about a pano it
                   // refused to return.
-                  console.log('[RWGPS SV Bridge] getPanorama error dump',
+                  vlog('[RWGPS SV Bridge] getPanorama error dump',
                     'req=' + reqId,
                     'attempt=' + (attemptNum + 1) + '/' + (MAX_RETRIES + 1),
                     'q=(' + msg.data.lat.toFixed(6) + ',' + msg.data.lng.toFixed(6) + ')',
@@ -762,7 +775,7 @@
 
                 if (noCoverage && attemptNum < MAX_RETRIES) {
                   attemptNum++;
-                  console.log('[RWGPS SV Bridge] getPanorama ZERO_RESULTS, retrying',
+                  vlog('[RWGPS SV Bridge] getPanorama ZERO_RESULTS, retrying',
                     'req=' + reqId,
                     'attempt=' + (attemptNum + 1) + '/' + (MAX_RETRIES + 1),
                     'q=(' + msg.data.lat.toFixed(6) + ',' + msg.data.lng.toFixed(6) + ')',
@@ -772,7 +785,7 @@
                 }
 
                 if (attemptNum > 0) {
-                  console.log('[RWGPS SV Bridge] getPanorama FAILED after retries',
+                  vlog('[RWGPS SV Bridge] getPanorama FAILED after retries',
                     'req=' + reqId,
                     'totalAttempts=' + (attemptNum + 1),
                     'noCoverage=' + noCoverage,
@@ -790,7 +803,7 @@
                 if (noCoverage) {
                   singleImageSearch(msg.data.lat, msg.data.lng, radius).then(function (sis) {
                     if (sis.ok && sis.panoType === 10) {
-                      console.log('[RWGPS SV Bridge] SIS rescue: rendering UGC from SIS data',
+                      vlog('[RWGPS SV Bridge] SIS rescue: rendering UGC from SIS data',
                         'req=' + reqId,
                         'q=(' + msg.data.lat.toFixed(6) + ',' + msg.data.lng.toFixed(6) + ')',
                         'panoid=' + sis.panoid,
@@ -872,19 +885,21 @@
             // point so we can decide whether to prefer non-postal results
             // (e.g. a "point_of_interest" or "natural_feature" with the
             // actual trail name).
-            try {
-              var diag = (results || []).map(function (r) {
-                return {
-                  formatted: r.formatted_address,
-                  types: (r.types || []).join('|'),
-                  placeName: (r.address_components && r.address_components[0] && r.address_components[0].long_name) || ''
-                };
-              });
-              console.log('[RWGPS SV Bridge] reverse-geocode',
-                '(' + msg.data.lat.toFixed(6) + ',' + msg.data.lng.toFixed(6) + ')',
-                'status=' + status,
-                'n=' + diag.length, diag);
-            } catch (e) { /* ignore */ }
+            if (debugEnabled) {
+              try {
+                var diag = (results || []).map(function (r) {
+                  return {
+                    formatted: r.formatted_address,
+                    types: (r.types || []).join('|'),
+                    placeName: (r.address_components && r.address_components[0] && r.address_components[0].long_name) || ''
+                  };
+                });
+                console.log('[RWGPS SV Bridge] reverse-geocode',
+                  '(' + msg.data.lat.toFixed(6) + ',' + msg.data.lng.toFixed(6) + ')',
+                  'status=' + status,
+                  'n=' + diag.length, diag);
+              } catch (e) { /* ignore */ }
+            }
             var streetNumber = '';
             var streetName = '';
             var city = '';
@@ -946,6 +961,11 @@
         }, '*');
         break;
       }
+
+      case 'SET_DEBUG': {
+        debugEnabled = !!(msg.data && msg.data.enabled);
+        break;
+      }
     }
   });
 
@@ -961,7 +981,7 @@
 
   // If google.maps is already loaded, bootstrap immediately
   if (window.google && window.google.maps && window.google.maps.Map) {
-    log('google.maps already loaded, bootstrapping');
+    vlog('[RWGPS SV Bridge] google.maps already loaded, bootstrapping');
     bootstrap();
   }
 

@@ -65,6 +65,16 @@
     </label>
   </div>
 
+  <!-- Verbose-debug toggle. Off by default. When on, content.js and page-
+       bridge.js emit per-lookup diagnostics (lookup-pano, ugc pano, pano
+       geometry, getPanorama retry/error dumps, SIS-rescue payloads,
+       reverse-geocode result dumps). Useful when investigating missing
+       coverage / wrong addresses; otherwise just console noise. -->
+  <div style="padding:8px 12px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;gap:8px;font-size:12px">
+    <input type="checkbox" id="verboseDebug" style="margin:0">
+    <label for="verboseDebug" style="cursor:pointer">Verbose console logging (debug)</label>
+  </div>
+
   <!-- FIRST RUN -->
   <section class="body body-firstrun" hidden>
     <div class="onboarding-card">
