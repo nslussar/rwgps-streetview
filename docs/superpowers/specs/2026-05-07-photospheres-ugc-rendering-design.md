@@ -641,3 +641,146 @@ For the writing-plans step:
 
 Each step is independently verifiable: lib has unit tests; bridge changes
 are testable by manual hover; content script is visual.
+
+---
+
+## 10. Operational findings (2026-05-12 addendum)
+
+Post-implementation real-use debugging surfaced a new failure mode and a
+second SIS response shape. This addendum records the findings and the
+patches that landed; the original design above is unchanged.
+
+### 10.1 Maps JS `getPanorama` is flaky
+
+Hover-sweeping a UGC-rich route (Snoqualmie Valley Trail) produced
+intermittent `ZERO_RESULTS` even at coords with known coverage. The same
+bucketed query within a single session sometimes succeeded and sometimes
+failed — pattern consistent with a coord-keyed negative-result cache or
+similar internal state in Maps JS that returns stale negatives.
+
+Disambiguating evidence:
+
+- **Static API at the same coords:** no missing coverage.
+- **"Open Street View in new tab" (`v` shortcut) at the same coords:** Google's own UI finds the panorama.
+- **SIS at the same coords:** finds the panorama every time.
+
+So coverage genuinely exists in Google's backend; only `getPanorama` (the
+Maps JS metadata wrapper) is missing it.
+
+Sample distribution from a 101-lookup sweep:
+
+| outcome | count | rate |
+|---|---|---|
+| `getPanorama` succeeds first attempt | 56 | 55% |
+| `getPanorama` succeeds after 1+ retries | 34 | 33% |
+| `getPanorama` exhausts retries, SIS rescue succeeds | 12 | 12% |
+| Unresolved | 0 | 0% |
+
+Headline: ~45% of `getPanorama` calls had a transient failure to absorb.
+
+### 10.2 Retry-with-logging (first defense)
+
+Bridge wraps `svc.getPanorama(opts)` in a 3-attempt retry chain (2
+retries, 300 ms apart). A fresh `StreetViewService` instance is created
+per attempt — in case Maps JS holds internal state on the instance.
+Retries fire only on `ZERO_RESULTS` (other errors fail through
+immediately).
+
+Logging vocabulary (all at `[RWGPS SV Bridge]` prefix):
+
+- `getPanorama error dump req=N attempt=K/3 q=(...)` — full error object,
+  including the `endLocation` field that Maps JS sometimes populates with
+  the nearest known pano even on ZERO_RESULTS.
+- `getPanorama ZERO_RESULTS, retrying req=N attempt=K/3 q=(...) delay=300ms`
+- `getPanorama retry SUCCESS req=N attempt=K/3 q=(...)`
+- `getPanorama FAILED after retries req=N totalAttempts=3 q=(...)`
+
+### 10.3 SingleImageSearch rescue (second defense)
+
+When the retry chain exhausts on `ZERO_RESULTS`, the bridge falls through
+to `singleImageSearch()` at the same coords. SIS hits a different
+backend path (`/$rpc/.../SingleImageSearch` — already used for UGC URL
+extraction in the original design) and reliably finds the panorama. The
+parser was extended to return full metadata; the bridge synthesizes a
+normal `PANO_INFO {kind: 'ugc', ...}` so the content side renders it via
+the existing UGC code path with no additional changes.
+
+Outcome handling:
+
+- **SIS returns type-10 (UGC):** synthesize `PANO_INFO`, send to content.
+- **SIS returns unhandled type (e.g. type-2):** log and fall through to
+  the original ZERO_RESULTS error (rare in practice; not yet seen).
+- **SIS also empty:** log and fall through to the original error.
+
+### 10.4 Parser extension (`parseUgcUrlFromResponse`)
+
+Originally returned only `{ok, tokenBase}`. Extended to also return:
+
+- `panoid` — inner-form panoid string (no CAoS wrapper)
+- `panoType` — 10 for UGC, 2 for SV-car (untested)
+- `snappedLat`, `snappedLng` — pano location
+- `originHeading`, `originHeadingAlt` — heading candidates
+- `originPitch` — normalized to (-180, 180]
+- `copyright` — `"© <author>"` formatted
+
+URL extraction remains regex-based; metadata extraction is positional but
+defensive (returns `undefined` for missing fields rather than throwing).
+
+### 10.5 Format B response shape (2026-05-12 new fixture)
+
+A third photographer's panoramas (Yogy Namara, Snoqualmie Valley Trail)
+revealed a different SIS response shape than the original Curt Sumner /
+Brian Ferris fixtures. Within `parsed[1][5][0][1]`:
+
+- **Format A** (Curt Sumner, Brian Ferris): 5-element array
+  `[latLng, headingArr, pitchArr, null, "US"]`. Heading at `[1][0]`,
+  pitch at `[2][2] mod 360`.
+- **Format B** (Yogy Namara): 3-element array `[latLng, null, packedArr]`
+  where `packedArr` is `[heading, ?, pitch]`. Heading at `[2][0]`, pitch
+  at `[2][2]`.
+
+The parser auto-detects: `Array.isArray(parsed[1][5][0][1][1])` selects
+Format A; null selects Format B. New fixture
+`test/fixtures/photospheres/ugc_yogy_namara.json` pins Format B.
+
+Refresh script (`scripts/refresh-photosphere-fixtures.sh`) now captures
+all three. Note: existing fixture changes between refreshes are typically
+ephemeral `gpms-cs-s` URL-token rotation (signed access tickets that
+Google rotates periodically) — not structural shifts. The regex URL
+extractor tolerates this silently; structural shifts would show up as
+new positional content in the diff.
+
+### 10.6 Future: SIS as primary lookup
+
+The natural next iteration — replace `getPanorama` with SIS as the
+primary metadata source — would eliminate the ~1 s latency penalty on
+the 12% of points currently routed through retries + rescue, and decouple
+the extension from Maps JS internal flakiness entirely. Sketch:
+
+1. **Verify SIS handles type-2 (SV-car) panos.** Sweep a route with known
+   urban-road coverage. Capture a type-2 SIS fixture. Confirm the
+   response shape (likely Format A or a third variant) and that
+   `worldSize` is present at `parsed[1][2][2]`.
+2. **Extend parser to return tile-render fields for type-2.** Add
+   `worldSize` extraction; route the synthetic `PANO_INFO` to
+   `{kind: 'tile', ...}` when `panoType === 2`.
+3. **Flip primary.** Bridge calls SIS first. `getPanorama` becomes
+   either deprecated or a fallback for SIS failures (TBD based on SIS
+   reliability data accumulated in step 1).
+4. **Retire retry logic** once `getPanorama` is no longer the primary.
+
+Deferred because (a) type-2 SIS shape is unverified, (b) the current
+rescue chain delivers 100% success, and (c) defense-in-depth — if SIS
+endpoint moves or protocol shifts, the current architecture still has a
+working `getPanorama` path.
+
+### 10.7 Polyline-distance filter — diagnosis update
+
+A separate design doc
+([`docs/superpowers/specs/2026-05-12-streetview-polyline-distance-filter-design.md`](2026-05-12-streetview-polyline-distance-filter-design.md))
+was drafted earlier in the same debugging session under the hypothesis
+that radius/density was the dominant cause of coverage gaps. That
+diagnosis turned out wrong — Maps JS flakiness was. The polyline filter
+remains a valid future tool for the rarer parallel-road-bleed case but
+is now lower-priority than initially framed. See that doc's header for
+the updated status.

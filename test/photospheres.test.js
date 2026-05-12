@@ -112,6 +112,79 @@ test('parseUgcUrlFromResponse: tokenBase ends BEFORE the render-spec separator',
   assert.equal(result.tokenBase, 'https://lh3.googleusercontent.com/gpms-cs-s/SOMETOKEN');
 });
 
+test('parseUgcUrlFromResponse: extracts panoid, lat/lng, headings, pitch, copyright from olympic-trail fixture', () => {
+  const raw = fs.readFileSync(fixturePath('ugc_olympic_trail.json'), 'utf8');
+  const result = RwgpsPhotospheres.parseUgcUrlFromResponse(raw);
+  assert.equal(result.ok, true);
+  assert.equal(result.panoType, 10);
+  assert.equal(result.panoid, 'CIABIhDoSxg21CJnhOxEDl_5I7PN');
+  // Snapped lat/lng for the Curt Sumner trail pano at ~48.0681,-123.8254.
+  assert.ok(Math.abs(result.snappedLat - 48.068066) < 0.001);
+  assert.ok(Math.abs(result.snappedLng - (-123.82543)) < 0.001);
+  // Heading and pitch are positional extractions — check they're plausible
+  // angles (0-360 range, finite numbers) rather than exact values, so a
+  // fixture refresh doesn't break the test on minor drift.
+  assert.equal(typeof result.originHeading, 'number');
+  assert.ok(result.originHeading >= 0 && result.originHeading < 360);
+  assert.equal(typeof result.originHeadingAlt, 'number');
+  assert.equal(typeof result.originPitch, 'number');
+  // THETA-X-on-bike captures: pitch should be small magnitude (within +/-30°).
+  assert.ok(Math.abs(result.originPitch) < 30,
+    'expected small-magnitude pitch, got ' + result.originPitch);
+  assert.equal(result.copyright, '© Curt Sumner');
+});
+
+test('parseUgcUrlFromResponse: same extraction works on discovery-park fixture (different photographer)', () => {
+  const raw = fs.readFileSync(fixturePath('ugc_discovery_park.json'), 'utf8');
+  const result = RwgpsPhotospheres.parseUgcUrlFromResponse(raw);
+  assert.equal(result.ok, true);
+  assert.equal(result.panoType, 10);
+  assert.equal(result.panoid, 'CIHM0ogKEICAgIDavdiU2AE');
+  // Discovery Park, Seattle: ~47.657, -122.416.
+  assert.ok(Math.abs(result.snappedLat - 47.6570) < 0.001);
+  assert.ok(Math.abs(result.snappedLng - (-122.4158)) < 0.001);
+  assert.equal(typeof result.originHeading, 'number');
+  assert.equal(result.copyright, '© Brian Ferris');
+});
+
+test('parseUgcUrlFromResponse: handles Yogy Namara fixture (format with packed heading+pitch)', () => {
+  // The Yogy Namara fixture uses a shorter location-block shape where the
+  // dedicated heading array at [1][5][0][1][1] is null and the heading+pitch
+  // are packed together at [1][5][0][1][2] as [heading, ?, pitch]. The
+  // parser must fall through to that position; otherwise originHeading
+  // comes back undefined and the rescued render uses yaw=routeHeading
+  // (often wrong direction). See SIS-rescue log analysis on 2026-05-12.
+  const raw = fs.readFileSync(fixturePath('ugc_yogy_namara.json'), 'utf8');
+  const result = RwgpsPhotospheres.parseUgcUrlFromResponse(raw);
+  assert.equal(result.ok, true);
+  assert.equal(result.panoType, 10);
+  assert.equal(result.panoid, 'CIHM0ogKEICAgIC4q9vTOA');
+  // Snoqualmie Valley Trail, near Carnation WA: ~47.587, -121.894.
+  assert.ok(Math.abs(result.snappedLat - 47.5874) < 0.001);
+  assert.ok(Math.abs(result.snappedLng - (-121.8940)) < 0.001);
+  assert.equal(result.originHeading, 205.125,
+    'expected heading from packed [heading,?,pitch] array at [2][0]');
+  // No alternate heading available in this format.
+  assert.equal(result.originHeadingAlt, undefined);
+  assert.equal(result.originPitch, 10.8);
+  assert.equal(result.copyright, '© Yogy Namara');
+});
+
+test('parseUgcUrlFromResponse: gracefully tolerates missing positional fields', () => {
+  // Synthesize a minimal response that has the URL but no other structure.
+  // parseUgcUrlFromResponse should still succeed on the URL extraction;
+  // the metadata fields come back undefined rather than throwing.
+  const fakeBody = '[[["https://lh3.googleusercontent.com/gpms-cs-s/TINY=w1-h1-k-no"]]]';
+  const result = RwgpsPhotospheres.parseUgcUrlFromResponse(fakeBody);
+  assert.equal(result.ok, true);
+  assert.equal(result.tokenBase, 'https://lh3.googleusercontent.com/gpms-cs-s/TINY');
+  // Missing metadata is undefined, not a throw.
+  assert.equal(result.panoid, undefined);
+  assert.equal(result.snappedLat, undefined);
+  assert.equal(result.originHeading, undefined);
+  assert.equal(result.copyright, '');
+});
+
 test('buildUgcRenderUrl: produces correct render-spec for forward-aligned heading', () => {
   const tokenBase = 'https://lh3.googleusercontent.com/gpms-cs-s/SOMETOKEN';
   // routeHeading 90, panoOriginHeading 90 → yaw 0 (forward).

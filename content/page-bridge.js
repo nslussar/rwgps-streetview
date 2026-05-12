@@ -654,7 +654,6 @@
             }, '*');
             return;
           }
-          var svc = new lib.StreetViewService();
           var opts = {
             location: { lat: msg.data.lat, lng: msg.data.lng },
             radius: radius
@@ -670,65 +669,194 @@
           // if quality complaints come in — see spec section 7.2.
           var sourceVal = (lib.StreetViewSource && lib.StreetViewSource.OUTDOOR) || 'outdoor';
           opts.source = sourceVal;
-          svc.getPanorama(opts)
-            .then(async function (res) {
-              var d = res && res.data;
-              if (!d || !d.location) {
-                sendPanoInfoError(reqId, { errorClass: 'NO_COVERAGE', message: 'no data' });
-                return;
-              }
 
-              var panoid = d.location.pano;
-              var common = {
-                panoid: panoid,
-                snappedLat: d.location.latLng.lat(),
-                snappedLng: d.location.latLng.lng(),
-                originHeading: d.tiles && d.tiles.originHeading,
-                originPitch: d.tiles && d.tiles.originPitch,
-                copyright: d.copyright || ''
-              };
+          // DIAGNOSTIC — Maps JS getPanorama is flaky: identical bucketed
+          // queries within a single session sometimes return ZERO_RESULTS and
+          // sometimes succeed. Static API at the same coords returns coverage,
+          // confirming the pano exists. Retry-with-logging distinguishes
+          // transient flakiness from genuine no-coverage. If retry success
+          // rate is high we'll either keep the retry or move to a different
+          // lookup path entirely. See logs tagged 'getPanorama retry'.
+          var MAX_RETRIES = 2;
+          var RETRY_DELAY_MS = 300;
+          var attemptNum = 0;
 
-              // Type-10 (UGC) branch — fire SingleImageSearch to extract the
-              // gpms-cs-s URL. streetviewpixels-pa doesn't serve type-10, so
-              // we have to render via a different content tier.
-              if (RwgpsPhotospheres.isUgcPanoid(panoid)) {
-                // Use the SNAPPED pano coords (from getPanorama) instead of the
-                // raw cursor lat/lng. SingleImageSearch ranks results by proximity
-                // to the query point — using the snapped coords guarantees we
-                // match the same pano getPanorama just confirmed exists, not a
-                // different nearby UGC pano.
-                var ugcResult = await singleImageSearch(common.snappedLat, common.snappedLng, radius);
-                if (ugcResult.ok) {
-                  sendPanoInfo(reqId, Object.assign({}, common, {
-                    kind: 'ugc',
-                    tokenBase: ugcResult.tokenBase
-                  }));
-                } else {
-                  sendPanoInfoError(reqId, ugcResult);
+          function doLookup() {
+            // Fresh StreetViewService per attempt — in case Maps JS holds
+            // internal state per-instance that contributes to flakiness.
+            var svc = new lib.StreetViewService();
+            svc.getPanorama(opts)
+              .then(async function (res) {
+                if (attemptNum > 0) {
+                  console.log('[RWGPS SV Bridge] getPanorama retry SUCCESS',
+                    'req=' + reqId,
+                    'attempt=' + (attemptNum + 1) + '/' + (MAX_RETRIES + 1),
+                    'q=(' + msg.data.lat.toFixed(6) + ',' + msg.data.lng.toFixed(6) + ')');
                 }
-                return;
-              }
+                var d = res && res.data;
+                if (!d || !d.location) {
+                  sendPanoInfoError(reqId, { errorClass: 'NO_COVERAGE', message: 'no data' });
+                  return;
+                }
 
-              // Type-2 path — existing tile-grid render.
-              var ws = d.tiles && d.tiles.worldSize;
-              sendPanoInfo(reqId, Object.assign({}, common, {
-                kind: 'tile',
-                worldSize: ws ? { width: ws.width, height: ws.height } : null
-              }));
-            })
-            .catch(function (e) {
-              var emsg = String(e && e.message || e);
-              var noCoverage = emsg.indexOf('ZERO_RESULTS') !== -1;
-              // For non-ZERO_RESULTS getPanorama failures, leave errorClass
-              // unset — these are Maps JS metadata-lookup failures, not the
-              // SingleImageSearch (G1) class. The content script's
-              // panoErrorMessage will fall through to the generic
-              // "Street View lookup failed" message.
-              sendPanoInfoError(reqId, {
-                errorClass: noCoverage ? 'NO_COVERAGE' : null,
-                message: emsg
+                var panoid = d.location.pano;
+                var common = {
+                  panoid: panoid,
+                  snappedLat: d.location.latLng.lat(),
+                  snappedLng: d.location.latLng.lng(),
+                  originHeading: d.tiles && d.tiles.originHeading,
+                  originPitch: d.tiles && d.tiles.originPitch,
+                  copyright: d.copyright || '',
+                  // Echoed for diagnostic logging on the content side — lets
+                  // the success log show q→snapped distance vs. radius.
+                  queryLat: msg.data.lat,
+                  queryLng: msg.data.lng,
+                  queryRadius: radius
+                };
+
+                // Type-10 (UGC) branch — fire SingleImageSearch to extract the
+                // gpms-cs-s URL. streetviewpixels-pa doesn't serve type-10, so
+                // we have to render via a different content tier.
+                if (RwgpsPhotospheres.isUgcPanoid(panoid)) {
+                  // Use the SNAPPED pano coords (from getPanorama) instead of the
+                  // raw cursor lat/lng. SingleImageSearch ranks results by proximity
+                  // to the query point — using the snapped coords guarantees we
+                  // match the same pano getPanorama just confirmed exists, not a
+                  // different nearby UGC pano.
+                  var ugcResult = await singleImageSearch(common.snappedLat, common.snappedLng, radius);
+                  if (ugcResult.ok) {
+                    sendPanoInfo(reqId, Object.assign({}, common, {
+                      kind: 'ugc',
+                      tokenBase: ugcResult.tokenBase
+                    }));
+                  } else {
+                    sendPanoInfoError(reqId, ugcResult);
+                  }
+                  return;
+                }
+
+                // Type-2 path — existing tile-grid render.
+                var ws = d.tiles && d.tiles.worldSize;
+                sendPanoInfo(reqId, Object.assign({}, common, {
+                  kind: 'tile',
+                  worldSize: ws ? { width: ws.width, height: ws.height } : null
+                }));
+              })
+              .catch(function (e) {
+                var emsg = String(e && e.message || e);
+                var noCoverage = emsg.indexOf('ZERO_RESULTS') !== -1;
+
+                if (noCoverage) {
+                  // Dump the full error object so DevTools surfaces fields
+                  // we currently ignore — most interesting one is
+                  // `endLocation` (LatLng of the closest pano Maps JS
+                  // considered, even on ZERO_RESULTS). If endLocation is
+                  // near our query, the backend knows about a pano it
+                  // refused to return.
+                  console.log('[RWGPS SV Bridge] getPanorama error dump',
+                    'req=' + reqId,
+                    'attempt=' + (attemptNum + 1) + '/' + (MAX_RETRIES + 1),
+                    'q=(' + msg.data.lat.toFixed(6) + ',' + msg.data.lng.toFixed(6) + ')',
+                    'error:', e);
+                }
+
+                if (noCoverage && attemptNum < MAX_RETRIES) {
+                  attemptNum++;
+                  console.log('[RWGPS SV Bridge] getPanorama ZERO_RESULTS, retrying',
+                    'req=' + reqId,
+                    'attempt=' + (attemptNum + 1) + '/' + (MAX_RETRIES + 1),
+                    'q=(' + msg.data.lat.toFixed(6) + ',' + msg.data.lng.toFixed(6) + ')',
+                    'delay=' + RETRY_DELAY_MS + 'ms');
+                  setTimeout(doLookup, RETRY_DELAY_MS);
+                  return;
+                }
+
+                if (attemptNum > 0) {
+                  console.log('[RWGPS SV Bridge] getPanorama FAILED after retries',
+                    'req=' + reqId,
+                    'totalAttempts=' + (attemptNum + 1),
+                    'noCoverage=' + noCoverage,
+                    'q=(' + msg.data.lat.toFixed(6) + ',' + msg.data.lng.toFixed(6) + ')');
+                }
+
+                // SIS RESCUE — after getPanorama exhausts retries on a
+                // ZERO_RESULTS, fall through to SingleImageSearch as the
+                // metadata source. SIS hits a different backend and reliably
+                // finds the panos getPanorama is stale-caching out. If SIS
+                // returns a type-10 (UGC) pano, build a synthetic PANO_INFO
+                // and route through the existing UGC render path. For other
+                // outcomes (SIS empty, unhandled type) we fall back to the
+                // original ZERO_RESULTS error.
+                if (noCoverage) {
+                  singleImageSearch(msg.data.lat, msg.data.lng, radius).then(function (sis) {
+                    if (sis.ok && sis.panoType === 10) {
+                      console.log('[RWGPS SV Bridge] SIS rescue: rendering UGC from SIS data',
+                        'req=' + reqId,
+                        'q=(' + msg.data.lat.toFixed(6) + ',' + msg.data.lng.toFixed(6) + ')',
+                        'panoid=' + sis.panoid,
+                        'snapped=(' + (sis.snappedLat != null ? sis.snappedLat.toFixed(6) : '?')
+                          + ',' + (sis.snappedLng != null ? sis.snappedLng.toFixed(6) : '?') + ')',
+                        'originHeading=' + (sis.originHeading != null ? sis.originHeading.toFixed(2) : '?'),
+                        'originHeadingAlt=' + (sis.originHeadingAlt != null ? sis.originHeadingAlt.toFixed(2) : '?'),
+                        'originPitch=' + (sis.originPitch != null ? sis.originPitch.toFixed(2) : '?'),
+                        'copyright=' + sis.copyright);
+                      sendPanoInfo(reqId, {
+                        kind: 'ugc',
+                        // Inner panoid (no CAoS wrapper). Downstream code
+                        // uses this only for logging — the UGC render path
+                        // builds URLs from tokenBase, not the panoid.
+                        panoid: sis.panoid,
+                        snappedLat: sis.snappedLat,
+                        snappedLng: sis.snappedLng,
+                        originHeading: sis.originHeading,
+                        originPitch: sis.originPitch,
+                        copyright: sis.copyright,
+                        tokenBase: sis.tokenBase,
+                        queryLat: msg.data.lat,
+                        queryLng: msg.data.lng,
+                        queryRadius: radius
+                      });
+                      return;
+                    }
+                    if (sis.ok) {
+                      console.log('[RWGPS SV Bridge] SIS rescue: unhandled panoType, falling back to error',
+                        'req=' + reqId, 'type=' + sis.panoType);
+                    } else {
+                      console.log('[RWGPS SV Bridge] SIS rescue: SIS also empty',
+                        'req=' + reqId,
+                        'q=(' + msg.data.lat.toFixed(6) + ',' + msg.data.lng.toFixed(6) + ')',
+                        'errorClass=' + sis.errorClass);
+                    }
+                    sendPanoInfoError(reqId, {
+                      errorClass: 'NO_COVERAGE',
+                      message: emsg
+                        + ' [q=' + msg.data.lat.toFixed(6)
+                        + ',' + msg.data.lng.toFixed(6)
+                        + ' r=' + radius + 'm'
+                        + ' attempts=' + (attemptNum + 1)
+                        + ' sis=' + (sis.ok ? 'type-' + sis.panoType : (sis.errorClass || 'empty'))
+                        + ']'
+                    });
+                  });
+                  return;
+                }
+
+                // Non-ZERO_RESULTS getPanorama failure (rare — network/
+                // service unavailability). Leave errorClass unset so the
+                // content script's panoErrorMessage falls through to the
+                // generic "Street View lookup failed" message.
+                sendPanoInfoError(reqId, {
+                  errorClass: null,
+                  message: emsg
+                    + ' [q=' + msg.data.lat.toFixed(6)
+                    + ',' + msg.data.lng.toFixed(6)
+                    + ' r=' + radius + 'm'
+                    + ' attempts=' + (attemptNum + 1) + ']'
+                });
               });
-            });
+          }
+
+          doLookup();
         });
         break;
       }
@@ -740,6 +868,23 @@
         geocoder.geocode(
           { location: { lat: msg.data.lat, lng: msg.data.lng } },
           function (results, status) {
+            // Diagnostic dump — surface what the geocoder offers at this
+            // point so we can decide whether to prefer non-postal results
+            // (e.g. a "point_of_interest" or "natural_feature" with the
+            // actual trail name).
+            try {
+              var diag = (results || []).map(function (r) {
+                return {
+                  formatted: r.formatted_address,
+                  types: (r.types || []).join('|'),
+                  placeName: (r.address_components && r.address_components[0] && r.address_components[0].long_name) || ''
+                };
+              });
+              console.log('[RWGPS SV Bridge] reverse-geocode',
+                '(' + msg.data.lat.toFixed(6) + ',' + msg.data.lng.toFixed(6) + ')',
+                'status=' + status,
+                'n=' + diag.length, diag);
+            } catch (e) { /* ignore */ }
             var streetNumber = '';
             var streetName = '';
             var city = '';

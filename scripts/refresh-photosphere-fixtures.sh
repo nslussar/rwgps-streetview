@@ -12,6 +12,9 @@
 # Coordinates chosen for stability:
 #   - Discovery Park trail (Brian Ferris) — known UGC, used in spec recipe 2
 #   - Olympic Discovery Trail (Curt Sumner Sept 2025) — different photographer
+#   - Snoqualmie Valley Trail (Yogy Namara) — third photographer whose response
+#     shape didn't fully parse with the originally-tuned positional indices;
+#     kept as a parser-regression guard
 #   - 0,0 mid-ocean — guaranteed no-results
 set -euo pipefail
 
@@ -33,5 +36,6 @@ curl_sis() {  # lat lng radius outfile
 echo "Capturing SingleImageSearch fixtures..."
 curl_sis 47.6570 -122.4158 30 ugc_discovery_park.json
 curl_sis 48.0680667 -123.8254309 30 ugc_olympic_trail.json
+curl_sis 47.587387 -121.894023 30 ugc_yogy_namara.json
 curl_sis 0 0 10 no_results.json
 echo "Done. Diff the fixtures and commit if changes look intentional."

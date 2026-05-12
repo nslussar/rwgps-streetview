@@ -981,6 +981,11 @@
       }, 500);
     }
 
+    console.log('[RWGPS Street View] lookup-pano req=' + id,
+      'bucketed=(' + b.lat.toFixed(6) + ',' + b.lng.toFixed(6) + ')',
+      'raw=(' + lat.toFixed(6) + ',' + lng.toFixed(6) + ')',
+      'r=' + radius + 'm');
+
     window.postMessage({
       type: PREFIX + 'REQUEST',
       action: 'LOOKUP_PANO',
@@ -1011,11 +1016,20 @@
       viewportW,
       viewportH);
 
+    var qDist = (data.queryLat != null && data.snappedLat != null)
+      ? RwgpsGeo.distanceMeters(
+          { lat: data.queryLat, lng: data.queryLng },
+          { lat: data.snappedLat, lng: data.snappedLng }).toFixed(1)
+      : '?';
     console.log('[RWGPS Street View] ugc pano',
       data.panoid,
       'originHeading=' + lastUgcOriginHeading.toFixed(1),
       'originPitch=' + lastUgcOriginPitch.toFixed(2),
       'yaw=' + (((pendingPanoHeading - lastUgcOriginHeading) % 360 + 360) % 360).toFixed(1),
+      'q=(' + (data.queryLat != null ? data.queryLat.toFixed(6) : '?')
+        + ',' + (data.queryLng != null ? data.queryLng.toFixed(6) : '?') + ')',
+      'qDist=' + qDist + 'm',
+      'r=' + (data.queryRadius != null ? data.queryRadius : '?') + 'm',
       'url=' + url);
 
     var pid = ++preloadCounter;
