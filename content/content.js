@@ -75,9 +75,9 @@
   let tilePx = DEFAULT_TILE_PX;
   let horizonNudgePx = DEFAULT_HORIZON_NUDGE_PX;
   // Per-lookup diagnostic logs (lookup-pano, ugc pano, pano geometry, plus
-  // the bridge-side retry / SIS-rescue / reverse-geocode dumps) are gated
-  // behind this flag, toggled from the popup. Default off — useful when
-  // investigating coverage gaps or wrong-address bugs.
+  // the bridge-side retry and reverse-geocode dumps) are gated behind this
+  // flag, toggled from the popup. Default off — useful when investigating
+  // coverage gaps or wrong-address bugs.
   let debugEnabled = false;
   // Cached values from the most recent experimental-preview render so we can re-apply
   // the inner-div transform when only a tunable knob changes (no new pano).
@@ -393,21 +393,24 @@
   }
 
   function injectBridge() {
-    // Inject the photospheres lib first so the bridge can call its helpers.
-    // Both go into MAIN world (the bridge's execution context). Top-level
-    // const declarations in the lib become available to the bridge via
-    // shared global lexical scope; the lib also attaches to window for
-    // belt-and-suspenders.
-    const lib = document.createElement('script');
-    lib.src = chrome.runtime.getURL('lib/photospheres.js');
-    document.documentElement.appendChild(lib);
-    lib.onload = function () {
-      lib.remove();
+    // Try to load the optional photospheres helper first, then the bridge
+    // (both go into MAIN world — the bridge's execution context). When the
+    // helper is present, top-level const declarations become available to
+    // the bridge via shared global lexical scope, and the lib also attaches
+    // to window for belt-and-suspenders. When it's not present, the
+    // onerror branch still loads the bridge; the bridge feature-detects
+    // the helper before using it.
+    function loadBridge() {
       const script = document.createElement('script');
       script.src = chrome.runtime.getURL('content/page-bridge.js');
       document.documentElement.appendChild(script);
       script.onload = function () { script.remove(); };
-    };
+    }
+    const lib = document.createElement('script');
+    lib.src = chrome.runtime.getURL('lib/photospheres.js');
+    lib.onload = function () { lib.remove(); loadBridge(); };
+    lib.onerror = function () { lib.remove(); loadBridge(); };
+    document.documentElement.appendChild(lib);
   }
 
   function createOverlay() {
@@ -1079,7 +1082,7 @@
     pre.onerror = function () {
       if (pid !== preloadCounter) return;
       showPanoError({
-        error: 'gpms-cs-s image load failed',
+        error: 'UGC image load failed',
         errorClass: 'UGC_IMAGE_LOAD_FAIL',
         noCoverage: false
       });
@@ -1124,6 +1127,12 @@
     }
 
     if (data.kind === 'ugc') {
+      // The UGC render path depends on the optional photospheres helper.
+      // If a UGC response reaches us without the helper loaded, fail to
+      // "no coverage" rather than crash on the buildUgcRenderUrl call.
+      if (typeof RwgpsPhotospheres === 'undefined') {
+        return showPanoError({ errorClass: 'UGC_UNSUPPORTED', noCoverage: true });
+      }
       return renderUgcPanorama(data, requestId);
     }
     // Defaults to tile path (also handles legacy responses without `kind`).

@@ -80,68 +80,11 @@
     return Promise.resolve(null);
   }
 
-  // SingleImageSearch — the metadata search RPC used by the Maps JS
-  // streetView library when locating user-contributed (type-10) photospheres.
-  // Called directly here because the panorama tile endpoint doesn't serve
-  // type-10 captures, so we need the render URL from this response to draw
-  // them. See design spec section 4.2 for the request shape.
-  var SINGLE_IMAGE_SEARCH_URL =
-    'https://maps.googleapis.com/$rpc/google.internal.maps.mapsjs.v1.MapsJsInternalService/SingleImageSearch';
-
-  // No bridge-side cache for v1: each LOOKUP_PANO that resolves to type-10
-  // fires its own SingleImageSearch. Forward-sweep workflows get zero
-  // benefit from caching here (each bucketed cursor position resolves to a
-  // unique panoid on trails with ~10m UGC spacing — typical when one rider
-  // uploads via a 360 camera at fixed intervals). Re-sweep / cursor-pause
-  // workflows would benefit, but the cache costs ~10 lines.
-  // FUTURE: see spec section 7.1 for a panoid-keyed cache + concurrent-dedup
-  // map design when telemetry justifies it.
-
-  // POST a SingleImageSearch request and parse the response for the
-  // gpms-cs-s URL. Returns:
-  //   { ok: true,  tokenBase: '...' }
-  //   { ok: false, errorClass: 'UGC_RPC_HTTP_ERROR' | 'UGC_RPC_PARSE_FAIL' | 'UGC_URL_NOT_FOUND', message: string }
-  async function singleImageSearch(lat, lng, radius) {
-    var body;
-    try {
-      body = JSON.stringify(
-        RwgpsPhotospheres.buildSingleImageSearchBody(lat, lng, radius));
-    } catch (e) {
-      return {
-        ok: false,
-        errorClass: 'UGC_RPC_PARSE_FAIL',
-        message: 'body build failed: ' + e.message
-      };
-    }
-
-    var resp;
-    try {
-      resp = await fetch(SINGLE_IMAGE_SEARCH_URL, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json+protobuf',
-          'x-user-agent': 'grpc-web-javascript/0.1'
-        },
-        body: body
-      });
-    } catch (e) {
-      return {
-        ok: false,
-        errorClass: 'UGC_RPC_HTTP_ERROR',
-        message: 'network: ' + e.message
-      };
-    }
-
-    if (!resp.ok) {
-      return {
-        ok: false,
-        errorClass: 'UGC_RPC_HTTP_ERROR',
-        message: 'HTTP ' + resp.status
-      };
-    }
-
-    var rawText = await resp.text();
-    return RwgpsPhotospheres.parseUgcUrlFromResponse(rawText);
+  // Type-10 (UGC) panoid detector — user-contributed photospheres encode
+  // as base64 with a 'CAoS' prefix. Used to route type-10 panoramas to a
+  // "no coverage" outcome, since UGC photosphere rendering is to-be-implemented.
+  function isType10PanoidLocal(panoid) {
+    return typeof panoid === 'string' && panoid.startsWith('CAoS');
   }
 
   // Wrap window.postMessage boilerplate for PANO_INFO responses.
@@ -725,24 +668,22 @@
                   queryRadius: radius
                 };
 
-                // Type-10 (UGC) branch — fire SingleImageSearch to extract the
-                // gpms-cs-s URL. streetviewpixels-pa doesn't serve type-10, so
-                // we have to render via a different content tier.
-                if (RwgpsPhotospheres.isUgcPanoid(panoid)) {
-                  // Use the SNAPPED pano coords (from getPanorama) instead of the
-                  // raw cursor lat/lng. SingleImageSearch ranks results by proximity
-                  // to the query point — using the snapped coords guarantees we
-                  // match the same pano getPanorama just confirmed exists, not a
-                  // different nearby UGC pano.
-                  var ugcResult = await singleImageSearch(common.snappedLat, common.snappedLng, radius);
-                  if (ugcResult.ok) {
-                    sendPanoInfo(reqId, Object.assign({}, common, {
-                      kind: 'ugc',
-                      tokenBase: ugcResult.tokenBase
-                    }));
-                  } else {
-                    sendPanoInfoError(reqId, ugcResult);
+                // Type-10 (UGC) panorama. UGC photosphere rendering is
+                // to-be-implemented; report no-coverage for now. If a UGC
+                // render helper is wired up via RwgpsPhotospheres, delegate
+                // to it (feature-detect below).
+                if (isType10PanoidLocal(panoid)) {
+                  if (typeof RwgpsPhotospheres === 'undefined'
+                      || typeof RwgpsPhotospheres.resolveUgcPanorama !== 'function') {
+                    sendPanoInfoError(reqId, {
+                      errorClass: 'NO_COVERAGE',
+                      message: 'ugc-not-yet-supported [panoid=' + panoid.slice(0, 8) + '...]'
+                    });
+                    return;
                   }
+                  var ugc = await RwgpsPhotospheres.resolveUgcPanorama(common, radius);
+                  if (ugc.ok) sendPanoInfo(reqId, ugc.panoInfo);
+                  else sendPanoInfoError(reqId, ugc.error);
                   return;
                 }
 
@@ -790,62 +731,29 @@
                     'q=(' + msg.data.lat.toFixed(6) + ',' + msg.data.lng.toFixed(6) + ')');
                 }
 
-                // SIS rescue — if getPanorama returns ZERO_RESULTS after
-                // retries, fall through to SingleImageSearch as the
-                // metadata source. If SIS returns a type-10 (UGC) pano,
-                // build a synthetic PANO_INFO and route through the
-                // existing UGC render path. Other outcomes (SIS empty,
-                // unhandled type) report the original ZERO_RESULTS error.
+                // ZERO_RESULTS after retries. If a rescue helper is wired
+                // up via RwgpsPhotospheres, delegate to it (it may recover
+                // the lookup through an alternate metadata source);
+                // otherwise report NO_COVERAGE from the getPanorama result.
                 if (noCoverage) {
-                  singleImageSearch(msg.data.lat, msg.data.lng, radius).then(function (sis) {
-                    if (sis.ok && sis.panoType === 10) {
-                      vlog('[RWGPS SV Bridge] SIS rescue: rendering UGC from SIS data',
-                        'req=' + reqId,
-                        'q=(' + msg.data.lat.toFixed(6) + ',' + msg.data.lng.toFixed(6) + ')',
-                        'panoid=' + sis.panoid,
-                        'snapped=(' + (sis.snappedLat != null ? sis.snappedLat.toFixed(6) : '?')
-                          + ',' + (sis.snappedLng != null ? sis.snappedLng.toFixed(6) : '?') + ')',
-                        'originHeading=' + (sis.originHeading != null ? sis.originHeading.toFixed(2) : '?'),
-                        'originHeadingAlt=' + (sis.originHeadingAlt != null ? sis.originHeadingAlt.toFixed(2) : '?'),
-                        'originPitch=' + (sis.originPitch != null ? sis.originPitch.toFixed(2) : '?'),
-                        'copyright=' + sis.copyright);
-                      sendPanoInfo(reqId, {
-                        kind: 'ugc',
-                        // Inner panoid (no CAoS wrapper). Downstream code
-                        // uses this only for logging — the UGC render path
-                        // builds URLs from tokenBase, not the panoid.
-                        panoid: sis.panoid,
-                        snappedLat: sis.snappedLat,
-                        snappedLng: sis.snappedLng,
-                        originHeading: sis.originHeading,
-                        originPitch: sis.originPitch,
-                        copyright: sis.copyright,
-                        tokenBase: sis.tokenBase,
-                        queryLat: msg.data.lat,
-                        queryLng: msg.data.lng,
-                        queryRadius: radius
-                      });
-                      return;
-                    }
-                    if (sis.ok) {
-                      vlog('[RWGPS SV Bridge] SIS rescue: unhandled panoType, falling back to error',
-                        'req=' + reqId, 'type=' + sis.panoType);
-                    } else {
-                      vlog('[RWGPS SV Bridge] SIS rescue: SIS also empty',
-                        'req=' + reqId,
-                        'q=(' + msg.data.lat.toFixed(6) + ',' + msg.data.lng.toFixed(6) + ')',
-                        'errorClass=' + sis.errorClass);
-                    }
+                  if (typeof RwgpsPhotospheres === 'undefined'
+                      || typeof RwgpsPhotospheres.tryRescueLookup !== 'function') {
                     sendPanoInfoError(reqId, {
                       errorClass: 'NO_COVERAGE',
                       message: emsg
                         + ' [q=' + msg.data.lat.toFixed(6)
                         + ',' + msg.data.lng.toFixed(6)
                         + ' r=' + radius + 'm'
-                        + ' attempts=' + (attemptNum + 1)
-                        + ' sis=' + (sis.ok ? 'type-' + sis.panoType : (sis.errorClass || 'empty'))
-                        + ']'
+                        + ' attempts=' + (attemptNum + 1) + ']'
                     });
+                    return;
+                  }
+                  RwgpsPhotospheres.tryRescueLookup(
+                    msg.data.lat, msg.data.lng, radius,
+                    reqId, attemptNum + 1, emsg, vlog
+                  ).then(function (result) {
+                    if (result.ok) sendPanoInfo(reqId, result.panoInfo);
+                    else sendPanoInfoError(reqId, result.error);
                   });
                   return;
                 }
