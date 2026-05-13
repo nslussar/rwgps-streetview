@@ -4,191 +4,198 @@
   <meta charset="utf-8">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="popup.css">
 </head>
-<body>
+<body class="popup-loading">
   <header class="header">
+    <img class="brand-icon" src="../icons/icon128.png" width="26" height="26" alt="">
     <div class="brand">
-      <img src="../icons/icon128.png" width="24" height="24" alt="">
       <span class="brand-name">Street View Preview</span>
-    </div>
-    <div class="status">
-      <span class="status-dot" aria-hidden="true"></span>
       <span class="version" id="version"></span>
     </div>
+    <!-- Preview on/off switch. Same behavior as the old big red button —
+         persisted to chrome.storage and toggleable via the `s` keyboard
+         shortcut. Click is wired in popup.js via #previewToggle. -->
+    <button id="previewToggle" type="button" class="header-toggle" role="switch" aria-checked="false" title="">
+      <span class="switch" aria-hidden="true"><span class="switch-thumb"></span></span>
+      <kbd class="switch-kbd">S</kbd>
+    </button>
   </header>
 
-  <!-- Preview on/off toggle. Talks to the active tab's content script via
-       chrome.tabs.sendMessage; falls back to disabled when the popup is
-       opened on a non-RWGPS tab. -->
-  <div class="preview-row">
-    <button id="previewToggle" type="button" class="preview-toggle" aria-pressed="false">
-      <svg class="preview-toggle-icon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-        <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-        <circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" stroke-width="1.5"/>
-      </svg>
-      <span class="preview-toggle-label" id="previewToggleLabel">Street View preview</span>
-      <kbd class="preview-toggle-kbd">s</kbd>
-    </button>
-  </div>
+  <div id="bodyDimmable" class="body-dimmable">
 
-  <!-- Experimental preview toggle (opt-in). Functional, not styled. -->
-  <div style="padding:8px 12px;border-bottom:1px solid #e5e7eb;display:flex;align-items:flex-start;gap:8px;font-size:12px">
-    <input type="checkbox" id="useExperimentalPreview" style="margin:3px 0 0 0">
-    <label for="useExperimentalPreview" style="cursor:pointer;flex:1">
-      <div>Experimental preview — no API key required</div>
-      <div style="font-size:11px;color:#666;margin-top:2px;line-height:1.4">
-        Uses the Maps JS panorama image endpoint directly. Some captures
-        (user-contributed photospheres on bike trails) are not supported
-        in this mode — provide an API key above for full coverage.
+    <!-- Mode picker — vertical radio cards (v5f "option B").
+         Selected card expands: radio + label + description on a second
+         line. Unselected card collapses to a single row: radio + label
+         (left) + short tag (right). CSS keys both layouts off aria-checked.
+         HTML defaults the Experimental card to checked because that's the
+         default mode for new users (popup.js flips to apikey on initial
+         render if a key is already configured). Writes useExperimentalPreview
+         in chrome.storage.sync. -->
+    <div class="mode-picker-wrap">
+      <div class="mode-picker" role="radiogroup" aria-label="Image source">
+        <button id="modeExperimental" type="button" class="mode-card" role="radio" data-mode="experimental" aria-checked="true">
+          <span class="mode-radio" aria-hidden="true"><span class="mode-radio-dot"></span></span>
+          <span class="mode-card-body">
+            <span class="mode-card-label">Experimental</span>
+            <span class="mode-card-desc">No API key needed. Bike trail coverage is limited.</span>
+          </span>
+          <span class="mode-card-short">no API key</span>
+        </button>
+        <button id="modeApiKey" type="button" class="mode-card" role="radio" data-mode="apikey" aria-checked="false">
+          <span class="mode-radio" aria-hidden="true"><span class="mode-radio-dot"></span></span>
+          <span class="mode-card-body">
+            <span class="mode-card-label">Bring your own API key</span>
+            <span class="mode-card-desc">Better bike trail coverage. 10,000 free requests / month.</span>
+          </span>
+          <span class="mode-card-short">better coverage</span>
+        </button>
       </div>
-    </label>
-  </div>
+    </div>
 
-  <!-- Dev/debug only — hidden in UI, plumbing still wired. -->
-  <div style="display:none;padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:12px;grid-template-columns:1fr 1fr;gap:6px 12px">
-    <label style="display:flex;align-items:center;gap:6px">
-      <span style="flex:1">Viewport width</span>
-      <input type="number" id="viewportW" min="200" max="900" step="10" style="width:56px">
-      <button type="button" data-reset="viewportW" title="Reset to default" aria-label="Reset viewport width" style="border:0;background:transparent;cursor:pointer;padding:0 2px;font-size:14px;color:#888;line-height:1">↺</button>
-    </label>
-    <label style="display:flex;align-items:center;gap:6px">
-      <span style="flex:1">Viewport height</span>
-      <input type="number" id="viewportH" min="150" max="600" step="10" style="width:56px">
-      <button type="button" data-reset="viewportH" title="Reset to default" aria-label="Reset viewport height" style="border:0;background:transparent;cursor:pointer;padding:0 2px;font-size:14px;color:#888;line-height:1">↺</button>
-    </label>
-    <label style="display:flex;align-items:center;gap:6px">
-      <span style="flex:1">Tile size (px)</span>
-      <input type="number" id="tilePx" min="80" max="800" step="10" style="width:56px">
-      <button type="button" data-reset="tilePx" title="Reset to default" aria-label="Reset tile size" style="border:0;background:transparent;cursor:pointer;padding:0 2px;font-size:14px;color:#888;line-height:1">↺</button>
-    </label>
-    <label style="display:flex;align-items:center;gap:6px">
-      <span style="flex:1">Horizon nudge (px)</span>
-      <input type="number" id="horizonNudgePx" min="-150" max="150" step="2" style="width:56px">
-      <button type="button" data-reset="horizonNudgePx" title="Reset to default" aria-label="Reset horizon nudge" style="border:0;background:transparent;cursor:pointer;padding:0 2px;font-size:14px;color:#888;line-height:1">↺</button>
-    </label>
-  </div>
+    <div class="body">
 
-  <!-- Verbose-debug toggle. Off by default. When on, content.js and page-
-       bridge.js emit per-lookup diagnostics (lookup-pano, ugc pano, pano
-       geometry, getPanorama retry/error dumps, SIS-rescue payloads,
-       reverse-geocode result dumps). Useful when investigating missing
-       coverage / wrong addresses; otherwise just console noise. -->
-  <div style="padding:8px 12px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;gap:8px;font-size:12px">
-    <input type="checkbox" id="verboseDebug" style="margin:0">
-    <label for="verboseDebug" style="cursor:pointer">Verbose console logging (debug)</label>
-  </div>
+      <!-- ───── Experimental mode body ───── -->
+      <section id="bodyExperimental" class="body-experimental" hidden></section>
 
-  <!-- FIRST RUN -->
-  <section class="body body-firstrun" hidden>
-    <div class="onboarding-card">
-      <div class="onboarding-headline">Paste your Google Maps API key</div>
-      <div class="onboarding-sub">The Street View Static API gives you<br>10,000 free requests every month.</div>
-      <div class="onboarding-row">
-        <div class="onboarding-input-wrap">
-          <input id="apiKeyOnboard" type="password" placeholder="AIza..."
-                 aria-label="Google Maps API key" autocomplete="off" spellcheck="false">
-          <button id="apiKeyOnboardEye" type="button" class="onboarding-eye" title="Show API key">
-            <img id="apiKeyOnboardEyeIcon" src="../icons/eye-hide.png" width="14" height="14" alt="Toggle visibility">
+      <!-- ───── API key mode body ───── -->
+      <section id="bodyApiKey" class="body-apikey" hidden>
+
+        <!-- First-run onboarding card -->
+        <div id="apiKeyOnboarding" class="apikey-onboarding" hidden>
+          <div class="onboarding-card">
+            <div class="onboarding-headline">Paste your Google Maps API key</div>
+            <div class="onboarding-sub">The Street View Static API gives you<br>10,000 free requests every month.</div>
+            <div class="onboarding-row">
+              <div class="onboarding-input-wrap">
+                <input id="apiKeyOnboard" type="password" placeholder="AIza..."
+                       aria-label="Google Maps API key" autocomplete="off" spellcheck="false">
+                <button id="apiKeyOnboardEye" type="button" class="onboarding-eye" title="Show API key">
+                  <img id="apiKeyOnboardEyeIcon" src="../icons/eye-hide.png" width="14" height="14" alt="Toggle visibility">
+                </button>
+              </div>
+              <button id="apiKeySaveBtn" type="button">Save</button>
+            </div>
+          </div>
+          <button id="howToToggle" class="disclosure disclosure-link" type="button" aria-expanded="false">
+            <span class="disclosure-label">
+              <svg class="caret" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+                <path d="M3 1l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              How to get an API key
+            </span>
+            <span class="disclosure-meta">5 min</span>
           </button>
-        </div>
-        <button id="apiKeySaveBtn" type="button">Save</button>
-      </div>
-    </div>
-    <button id="howToToggle" class="disclosure disclosure-link" type="button" aria-expanded="false">
-      <span class="disclosure-label">
-        <svg class="caret" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-          <path d="M3 1l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        How to get an API key
-      </span>
-      <span class="disclosure-meta">5 min</span>
-    </button>
-    <ol id="howToList" class="howto" hidden>
-      <li>Open <a href="https://console.cloud.google.com/apis" target="_blank" rel="noopener">Google Cloud Console<svg class="ext-icon" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-        <path d="M3.5 2H2v6h6V6.5M5.5 2H8v2.5M8 2L4.5 5.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg></a></li>
-      <li>Create or select a project</li>
-      <li>Enable <b>Street View Static API</b></li>
-      <li>Credentials &rarr; Create credentials &rarr; API key</li>
-      <li>Copy &amp; paste the key above</li>
-      <li>Recommended: <a href="https://github.com/nslussar/rwgps-streetview/blob/main/docs/api_key_setup/README.md#3-restrict-the-key" target="_blank" rel="noopener">restrict &amp; protect the key<svg class="ext-icon" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-        <path d="M3.5 2H2v6h6V6.5M5.5 2H8v2.5M8 2L4.5 5.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg></a></li>
-    </ol>
-  </section>
-
-  <!-- ACTIVE / OVER QUOTA / INVALID KEY -->
-  <section class="body body-main" hidden>
-    <div id="invalidKeyBlock" class="invalid-block" hidden>
-      <div class="invalid-icon">!</div>
-      <div class="invalid-content">
-        <div class="invalid-title">API key rejected by Google</div>
-        <div class="invalid-body">Last response: <b>REQUEST_DENIED</b>. The key may be invalid, restricted to a different API, or the Street View Static API isn't enabled.</div>
-        <div class="invalid-actions">
-          <button id="replaceKeyBtn" type="button" class="btn btn-danger">Replace key</button>
-          <a id="cloudConsoleLink" class="btn btn-danger-outline" href="https://console.cloud.google.com/apis" target="_blank" rel="noopener">Open Cloud Console</a>
-        </div>
-      </div>
-    </div>
-
-    <div id="dimmable" class="dimmable">
-
-      <div class="hero">
-        <div class="hero-eyebrow">
-          <span id="usageMonth">Usage</span>
-          <button id="resetUsage" type="button" class="link-btn" title="Reset monthly counters">Reset</button>
-        </div>
-        <div class="hero-number">
-          <span id="usageSv" class="hero-used">0</span><span class="hero-divider"> / </span><span id="usageCapDisplay" class="hero-max">10,000</span>
-        </div>
-        <div id="overCapLabel" class="over-cap-label" hidden>Monthly cap reached</div>
-
-        <div class="hero-bar"><div id="usageBarFill" class="hero-bar-fill"></div></div>
-        <div class="hero-scale">
-          <span>0</span>
-          <span id="usageScaleMax">10k</span>
+          <ol id="howToList" class="howto" hidden>
+            <li>Open <a href="https://console.cloud.google.com/apis" target="_blank" rel="noopener">Google Cloud Console<svg class="ext-icon" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+              <path d="M3.5 2H2v6h6V6.5M5.5 2H8v2.5M8 2L4.5 5.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg></a></li>
+            <li>Create or select a project</li>
+            <li>Enable <b>Street View Static API</b></li>
+            <li>Credentials &rarr; Create credentials &rarr; API key</li>
+            <li>Copy &amp; paste the key above</li>
+            <li>Recommended: <a href="https://github.com/nslussar/rwgps-streetview/blob/main/docs/api_key_setup/README.md#3-restrict-the-key" target="_blank" rel="noopener">restrict &amp; protect the key<svg class="ext-icon" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+              <path d="M3.5 2H2v6h6V6.5M5.5 2H8v2.5M8 2L4.5 5.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg></a></li>
+          </ol>
         </div>
 
-        <div class="stat-row stat-row-first">
-          <span class="stat-label">Served from cache</span>
-          <span class="stat-value" id="usageSvCached">0</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">Geocoding (not counted against quota)</span>
-          <span class="stat-value" id="usageGeo">0</span>
-        </div>
-
-        <div id="overQuotaNotice" class="notice notice-danger" hidden>
-          <span class="notice-bullet" aria-hidden="true">&#9679;</span>
-          <span class="notice-text">Cap reached. Previews paused until <span id="nextResetDate">next month</span>, or raise the cap below.</span>
-        </div>
-
-        <div id="rateLimitNotice" class="notice notice-warn" hidden>
-          <span class="notice-bullet" aria-hidden="true">&#8635;</span>
-          <span class="notice-text">Google rate-limited the last request. Slowing down&hellip;</span>
+        <!-- Invalid-key block (replaces Usage when the last API call returned REQUEST_DENIED). -->
+        <div id="invalidKeyBlock" class="invalid-block" hidden>
+          <div class="invalid-icon">!</div>
+          <div class="invalid-content">
+            <div class="invalid-title">API key rejected by Google</div>
+            <div class="invalid-body">Last response: <b>REQUEST_DENIED</b>. The key may be invalid, restricted to a different API, or the Street View Static API isn't enabled.</div>
+            <div class="invalid-actions">
+              <button id="replaceKeyBtn" type="button" class="btn btn-danger">Replace key</button>
+              <a id="cloudConsoleLink" class="btn btn-danger-outline" href="https://console.cloud.google.com/apis" target="_blank" rel="noopener">Open Cloud Console</a>
+            </div>
+          </div>
         </div>
 
-        <div id="activePagePill" class="page-pill" hidden>
-          <span class="page-pill-label">
-            <span class="status-dot status-dot-ok" aria-hidden="true"></span>
-            Active on this page
-          </span>
-          <span class="page-pill-counter">
-            <span id="sessionSv">0</span> requests &middot;
-            <span id="sessionSvCached">0</span> cached &middot;
-            <span id="sessionGeo">0</span> geo
-          </span>
+        <!-- "Google Maps API" disclosure — usage meter + cap + API key all
+             live inside this single panel in v5e. Default-open in
+             apikey-active state. -->
+        <div id="usageSection" class="usage-section" hidden>
+          <button id="usageToggle" type="button" class="disclosure disclosure-section disclosure-section-flush" aria-expanded="false" aria-controls="usagePanel">
+            <span class="disclosure-label">
+              <svg class="caret" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+                <path d="M3 1l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              Google Maps API
+            </span>
+            <span class="disclosure-meta usage-summary">
+              <span id="usageSv" class="usage-summary-used">0</span><span class="usage-summary-divider"> / </span><span id="usageCapDisplay">10,000</span>
+            </span>
+          </button>
+          <div id="usagePanel" class="usage-panel" hidden>
+            <div class="usage-eyebrow">
+              <span id="usageMonth">Usage</span>
+              <button id="resetUsage" type="button" class="link-btn" title="Reset monthly counters">Reset</button>
+            </div>
+            <div class="hero-bar"><div id="usageBarFill" class="hero-bar-fill"></div></div>
+            <div class="hero-scale">
+              <span>0</span>
+              <span id="usageScaleMax">10k</span>
+            </div>
+            <div id="overCapLabel" class="over-cap-label" hidden>Monthly cap reached</div>
+            <div class="stat-row stat-row-first">
+              <span class="stat-label">Served from cache</span>
+              <span class="stat-value" id="usageSvCached">0</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Geocoding (separate quota)</span>
+              <span class="stat-value" id="usageGeo">0</span>
+            </div>
+
+            <div id="overQuotaNotice" class="notice notice-danger" hidden>
+              <span class="notice-bullet" aria-hidden="true">&#9679;</span>
+              <span class="notice-text">Cap reached. Previews paused until <span id="nextResetDate">next month</span>, or raise the cap below.</span>
+            </div>
+
+            <div id="rateLimitNotice" class="notice notice-warn" hidden>
+              <span class="notice-bullet" aria-hidden="true">&#8635;</span>
+              <span class="notice-text">Google rate-limited the last request. Slowing down&hellip;</span>
+            </div>
+
+            <div id="activePagePill" class="page-pill" hidden>
+              <span class="page-pill-label">
+                <span class="status-dot status-dot-ok" aria-hidden="true"></span>
+                Active on this page
+              </span>
+              <span class="page-pill-counter">
+                <span id="sessionSv">0</span> sv &middot;
+                <span id="sessionSvCached">0</span> cached &middot;
+                <span id="sessionGeo">0</span> geo
+              </span>
+            </div>
+
+            <!-- Cap row (now inside the disclosure panel) -->
+            <label id="capRow" class="cap-row">
+              <input type="checkbox" id="apiCapEnabled" checked>
+              <span class="cap-label">Enforce monthly cap of</span>
+              <input type="number" id="apiCap" min="0" step="100" value="10000">
+            </label>
+
+            <!-- API key (now inside the disclosure panel as a plain labeled
+                 field). The password input is editable in place; eye toggle
+                 reveals. -->
+            <div class="apikey-row">
+              <div class="apikey-row-label">API key</div>
+              <div class="key-field">
+                <input id="apiKey" type="password" class="key-input" placeholder="AIza..." spellcheck="false" autocomplete="off" aria-label="Google Maps API key">
+                <button id="keyEye" type="button" class="key-eye" title="Show/hide API key">
+                  <img id="keyEyeIcon" src="../icons/eye-hide.png" width="14" height="14" alt="Toggle visibility">
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <label class="cap-row">
-        <input type="checkbox" id="apiCapEnabled" checked>
-        <span class="cap-label">Enforce monthly cap of</span>
-        <input type="number" id="apiCap" min="0" step="100" value="10000">
-      </label>
+      </section>
 
+      <!-- ───── Advanced disclosure (shared between modes) ───── -->
       <button id="advToggle" type="button" class="disclosure disclosure-section" aria-expanded="false" aria-controls="advanced">
         <span class="disclosure-label">
           <svg class="caret" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
@@ -196,63 +203,80 @@
           </svg>
           Advanced
         </span>
-        <span class="disclosure-meta">4 settings</span>
       </button>
-      <div id="advanced" class="advanced-grid" hidden>
-        <div class="adv-field">
-          <div class="adv-label">Search radius <span class="adv-unit">(m)</span></div>
-          <input id="radius" type="number" min="1" max="100" value="10">
-          <div class="adv-hint">Max distance from the cursor to find a Street View panorama.</div>
-        </div>
-        <div class="adv-field">
-          <div class="adv-label">Position rounding <span class="adv-unit">(m)</span></div>
-          <input id="bucketMeters" type="number" min="0" max="100" value="10">
-          <div class="adv-hint">Snap nearby positions to reuse cached images.</div>
-        </div>
-        <div class="adv-field">
-          <div class="adv-label">Min cursor move <span class="adv-unit">(m)</span></div>
-          <input id="skipThresholdMeters" type="number" min="0" max="200" value="10">
-          <div class="adv-hint">Distance threshold before refetching. Auto-scales up when zoomed out.</div>
-        </div>
-        <div class="adv-field">
-          <div class="adv-label">Settle delay <span class="adv-unit">(ms)</span></div>
-          <input id="dwellMs" type="number" min="0" max="1000" step="50" value="200">
-          <div class="adv-hint">Wait for cursor to stop before fetching.</div>
-        </div>
-      </div>
+      <div id="advanced" class="advanced-panel" hidden>
+        <!-- Debug subsection — verbose console logging.
+             Off by default; when on, content.js and page-bridge.js emit
+             per-lookup diagnostics. -->
+        <label class="adv-debug-row">
+          <input type="checkbox" id="verboseDebug">
+          <span>Enable debug logging</span>
+        </label>
 
-      <button id="keyToggle" type="button" class="key-toggle" aria-expanded="false" aria-controls="keyField">
-        <span class="key-toggle-label">
-          <svg class="caret" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-            <path d="M3 1l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          <svg class="key-icon" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-            <circle cx="4" cy="6" r="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/>
-            <path d="M6 6h5M9 6v2M11 6v2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          API key
-          <svg class="check-icon" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-            <path d="M2 6.5l2.5 2.5L10 3.5" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </span>
-      </button>
-      <div id="keyField" class="key-field-row" hidden>
-        <div class="key-field">
-          <input id="apiKey" type="password" class="key-input" placeholder="AIza..." spellcheck="false" autocomplete="off" aria-label="Google Maps API key">
-          <button id="keyEye" type="button" class="key-eye" title="Show/hide API key">
-            <img id="keyEyeIcon" src="../icons/eye-hide.png" width="14" height="14" alt="Toggle visibility">
+        <!-- Four user-tunables -->
+        <div class="advanced-grid">
+          <div class="adv-field">
+            <div class="adv-label">Search radius <span class="adv-unit">(m)</span></div>
+            <input id="radius" type="number" min="1" max="100" value="10">
+            <div class="adv-hint">Max distance from the cursor to find a Street View panorama.</div>
+          </div>
+          <div class="adv-field">
+            <div class="adv-label">Position rounding <span class="adv-unit">(m)</span></div>
+            <input id="bucketMeters" type="number" min="0" max="100" value="10">
+            <div class="adv-hint">Snap nearby positions to reuse cached images.</div>
+          </div>
+          <div class="adv-field">
+            <div class="adv-label">Min cursor move <span class="adv-unit">(m)</span></div>
+            <input id="skipThresholdMeters" type="number" min="0" max="200" value="10">
+            <div class="adv-hint">Distance threshold before refetching. Auto-scales up when zoomed out.</div>
+          </div>
+          <div class="adv-field">
+            <div class="adv-label">Settle delay <span class="adv-unit">(ms)</span></div>
+            <input id="dwellMs" type="number" min="0" max="1000" step="50" value="200">
+            <div class="adv-hint">Wait for cursor to stop before fetching.</div>
+          </div>
+        </div>
+
+        <!-- "Reset all to defaults" — only rendered when at least one of the
+             four tunables above differs from its default. Clicking removes
+             the storage keys, which makes content.js + the popup fall back
+             to defaults via the existing storage.onChanged handler. -->
+        <div id="advResetAll" class="adv-reset-all" hidden>
+          <button id="advResetAllBtn" type="button" title="Restore all four settings to defaults">
+            <svg width="11" height="11" viewBox="0 0 13 13" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 6.5a4.5 4.5 0 1 1-1.5-3.4M11 1v3h-3"/>
+            </svg>
+            Reset all to defaults
           </button>
         </div>
-        <button id="keyDelete" type="button" class="key-delete" title="Delete API key" aria-label="Delete API key">
-          <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-            <path d="M2.5 4h9M5.5 4V2.75a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 .75.75V4M3.75 4l.55 7.3a.75.75 0 0 0 .75.7h3.9a.75.75 0 0 0 .75-.7L10.25 4M6 6.5v3.5M8 6.5v3.5"
-                  fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </button>
+
+        <!-- Dev-only viewport/tile tuning — kept wired but hidden in UI. -->
+        <div class="advanced-dev-grid" hidden>
+          <label>
+            <span>Viewport width</span>
+            <input type="number" id="viewportW" min="200" max="900" step="10">
+            <button type="button" data-reset="viewportW" aria-label="Reset viewport width">&#8634;</button>
+          </label>
+          <label>
+            <span>Viewport height</span>
+            <input type="number" id="viewportH" min="150" max="600" step="10">
+            <button type="button" data-reset="viewportH" aria-label="Reset viewport height">&#8634;</button>
+          </label>
+          <label>
+            <span>Tile size (px)</span>
+            <input type="number" id="tilePx" min="80" max="800" step="10">
+            <button type="button" data-reset="tilePx" aria-label="Reset tile size">&#8634;</button>
+          </label>
+          <label>
+            <span>Horizon nudge (px)</span>
+            <input type="number" id="horizonNudgePx" min="-150" max="150" step="2">
+            <button type="button" data-reset="horizonNudgePx" aria-label="Reset horizon nudge">&#8634;</button>
+          </label>
+        </div>
       </div>
 
     </div>
-  </section>
+  </div>
 
   <script src="../lib/usage.js"></script>
   <script src="popup.js"></script>

@@ -8,29 +8,47 @@ var DEFAULT_TILE_PX = 200;
 var DEFAULT_HORIZON_NUDGE_PX = 0;
 var RATE_LIMIT_WINDOW_MS = 60 * 1000;
 
-var STATE = {
-  FIRSTRUN: 'firstrun',
-  INVALIDKEY: 'invalidkey',
-  OVERQUOTA: 'overquota',
-  ACTIVE: 'active'
-};
+// Which collapsible is open in the body. At most one at a time —
+// opening any of these closes the others. Two sections in v5e: the
+// "Google Maps API" disclosure (`usage`) folds in cap + key, and Advanced.
+var SECTIONS = ['usage', 'advanced'];
 
 document.addEventListener('DOMContentLoaded', function () {
   function $(id) { return document.getElementById(id); }
 
-  var bodyMain = document.querySelector('.body-main');
-  var bodyFirst = document.querySelector('.body-firstrun');
-  var statusDot = document.querySelector('.header .status-dot');
+  // Header
+  var previewToggleBtn = $('previewToggle');
+  var versionEl = $('version');
 
+  // Body wrapper that dims when the preview is disabled
+  var bodyDimmable = $('bodyDimmable');
+
+  // Mode picker (vertical radio cards). The descriptive text lives inside
+  // each card; there's no separate first-run hint element anymore.
+  var modeExperimentalBtn = $('modeExperimental');
+  var modeApiKeyBtn = $('modeApiKey');
+
+  // Bodies
+  var bodyExperimental = $('bodyExperimental');
+  var bodyApiKey = $('bodyApiKey');
+
+  // API-key onboarding (firstrun + apikey)
+  var apiKeyOnboardingEl = $('apiKeyOnboarding');
   var apiKeyOnboardInput = $('apiKeyOnboard');
   var apiKeySaveBtn = $('apiKeySaveBtn');
   var howToToggle = $('howToToggle');
   var howToList = $('howToList');
+  var apiKeyOnboardEye = $('apiKeyOnboardEye');
+  var apiKeyOnboardEyeIcon = $('apiKeyOnboardEyeIcon');
 
+  // Invalid-key block
   var invalidBlock = $('invalidKeyBlock');
-  var dimmable = $('dimmable');
   var replaceKeyBtn = $('replaceKeyBtn');
 
+  // Usage disclosure
+  var usageSection = $('usageSection');
+  var usageToggle = $('usageToggle');
+  var usagePanel = $('usagePanel');
   var usageMonthEl = $('usageMonth');
   var usageSvEl = $('usageSv');
   var usageCapDisplayEl = $('usageCapDisplay');
@@ -46,40 +64,35 @@ document.addEventListener('DOMContentLoaded', function () {
   var sessionSvEl = $('sessionSv');
   var sessionSvCachedEl = $('sessionSvCached');
   var sessionGeoEl = $('sessionGeo');
-
   var resetBtn = $('resetUsage');
+
+  // Cap row (now lives inside the Google Maps API disclosure panel)
   var apiCapInput = $('apiCap');
   var apiCapEnabledInput = $('apiCapEnabled');
-  var advToggle = $('advToggle');
-  var advancedGrid = $('advanced');
 
+  // Advanced
+  var advToggle = $('advToggle');
+  var advancedPanel = $('advanced');
+  var advResetAll = $('advResetAll');
+  var advResetAllBtn = $('advResetAllBtn');
   var radiusInput = $('radius');
   var bucketMetersInput = $('bucketMeters');
   var skipThresholdMetersInput = $('skipThresholdMeters');
   var dwellMsInput = $('dwellMs');
-
-  var previewToggleBtn = $('previewToggle');
-  var previewToggleLabelEl = $('previewToggleLabel');
-  var previewMode = null; // 'editor' | 'viewer' | null (no content script — popup writes storage directly)
-
-  var useExperimentalPreviewInput = $('useExperimentalPreview');
   var verboseDebugInput = $('verboseDebug');
   var viewportWInput = $('viewportW');
   var viewportHInput = $('viewportH');
   var tilePxInput = $('tilePx');
   var horizonNudgePxInput = $('horizonNudgePx');
 
-  var keyToggle = $('keyToggle');
-  var keyField = $('keyField');
+  // API key field — now lives inside the "Google Maps API" disclosure
+  // panel rather than its own collapsible section.
   var apiKeyInput = $('apiKey');
   var keyEye = $('keyEye');
   var keyEyeIcon = $('keyEyeIcon');
-  var keyDelete = $('keyDelete');
-  var apiKeyOnboardEye = $('apiKeyOnboardEye');
-  var apiKeyOnboardEyeIcon = $('apiKeyOnboardEyeIcon');
 
   var manifest = chrome.runtime.getManifest();
-  $('version').textContent = manifest.version === '0.0.0' ? '(dev)' : 'v' + manifest.version;
+  versionEl.textContent = manifest.version === '0.0.0' ? '(dev)' : 'v' + manifest.version;
 
   var state = {
     apiKey: '',
@@ -92,9 +105,13 @@ document.addEventListener('DOMContentLoaded', function () {
     sessionGeo: 0,
     cap: RwgpsUsage.DEFAULT_CAP,
     capEnabled: true,
-    rateLimitedAt: 0
+    rateLimitedAt: 0,
+    mode: 'experimental',       // 'apikey' | 'experimental' — backs useExperimentalPreview (default experimental for new users; switches to apikey if a key is already set)
+    previewEnabled: true,       // header switch
+    openSection: 'usage'        // null | 'usage' | 'advanced'
   };
   var activeTabId = null;
+  var previewMode = null; // 'editor' | 'viewer' | null (content-script reachability)
 
   function fmt(n) { return Number(n || 0).toLocaleString(); }
   function numOr(v, fallback) { return (typeof v === 'number' && v >= 0) ? v : fallback; }
@@ -109,42 +126,102 @@ document.addEventListener('DOMContentLoaded', function () {
     return nm.toLocaleString(undefined, { month: 'long', day: 'numeric' });
   }
 
-  function decideState() {
-    if (!state.apiKey) return STATE.FIRSTRUN;
-    if (state.apiKeyInvalid) return STATE.INVALIDKEY;
-    if (state.capEnabled && state.monthSv >= state.cap) return STATE.OVERQUOTA;
-    return STATE.ACTIVE;
+  function isFirstRun() {
+    // First run = the user hasn't configured an API key yet. In experimental
+    // mode this is also "first run" in the sense that we still want to show
+    // the explanatory hint at the top.
+    return !state.apiKey;
+  }
+  function isInvalidKey() {
+    return state.mode === 'apikey' && !!state.apiKey && state.apiKeyInvalid;
+  }
+  function isOverQuota() {
+    return state.mode === 'apikey' && !!state.apiKey && !state.apiKeyInvalid
+      && state.capEnabled && state.monthSv >= state.cap;
   }
 
-  function setStatusDot(s) {
-    statusDot.classList.remove('status-dot-ok', 'status-dot-warn', 'status-dot-danger');
-    if (s === STATE.FIRSTRUN) statusDot.classList.add('status-dot-warn');
-    else if (s === STATE.INVALIDKEY) statusDot.classList.add('status-dot-danger');
-    else statusDot.classList.add('status-dot-ok');
+  function setSectionOpen(id) {
+    state.openSection = id;
+    var open = { usage: id === 'usage', advanced: id === 'advanced' };
+    usageToggle.setAttribute('aria-expanded', open.usage ? 'true' : 'false');
+    advToggle.setAttribute('aria-expanded', open.advanced ? 'true' : 'false');
+    usagePanel.hidden = !open.usage;
+    advancedPanel.hidden = !open.advanced;
+  }
+
+  function applyMode(mode) {
+    state.mode = mode === 'experimental' ? 'experimental' : 'apikey';
+    modeExperimentalBtn.setAttribute('aria-checked', state.mode === 'experimental' ? 'true' : 'false');
+    modeApiKeyBtn.setAttribute('aria-checked', state.mode === 'apikey' ? 'true' : 'false');
+  }
+
+  function renderHeaderToggle() {
+    var on = !!state.previewEnabled;
+    previewToggleBtn.setAttribute('aria-checked', on ? 'true' : 'false');
+    previewToggleBtn.title = on ? 'Click to disable Street View preview (S)' : 'Click to enable Street View preview (S)';
+    bodyDimmable.classList.toggle('disabled', !on);
   }
 
   function render() {
-    var s = decideState();
-    setStatusDot(s);
-    bodyFirst.hidden = s !== STATE.FIRSTRUN;
-    bodyMain.hidden = s === STATE.FIRSTRUN;
+    renderHeaderToggle();
 
-    if (s === STATE.FIRSTRUN) {
+    var firstRun = isFirstRun();
+    var invalid = isInvalidKey();
+    var over = isOverQuota();
+    var experimental = state.mode === 'experimental';
+
+    // Body containers
+    bodyExperimental.hidden = !experimental;
+    bodyApiKey.hidden = experimental;
+    // In experimental mode there's nothing above Advanced, so we pull it
+    // flush to the top of the body padding (matches the reference layout).
+    bodyDimmable.classList.toggle('mode-experimental', experimental);
+
+    if (experimental) {
+      // Experimental body is empty — the mode card already describes the path.
+      // Advanced (the next sibling) is the only thing rendered.
+    } else {
+      // API-key body. Onboarding takes over when there's no key. Cap row +
+      // API key field live inside the Google Maps API disclosure, so they
+      // ride along with usageSection's visibility.
+      apiKeyOnboardingEl.hidden = !firstRun;
+      invalidBlock.hidden = !invalid;
+      usageSection.hidden = firstRun || invalid;
+    }
+
+    // Section visibility depends on whether the section's owning UI is
+    // visible. If user's persisted openSection isn't applicable to the
+    // current mode/state, fall back to a sensible default.
+    var available = computeAvailableSections(firstRun, invalid, experimental);
+    var openId = state.openSection;
+    if (openId && available.indexOf(openId) === -1) openId = null;
+    if (openId === null) {
+      // Default behaviors:
+      //   - apikey + active: open Usage
+      //   - everything else: nothing open by default
+      if (!experimental && !firstRun && !invalid) openId = 'usage';
+    }
+    setSectionOpen(openId);
+
+    // Fill Usage view (even when closed — the disclosure summary needs it)
+    renderUsageNumbers(over);
+
+    if (firstRun && !experimental) {
       apiKeyOnboardInput.focus();
-      return;
     }
 
-    // Restore the user's last Advanced-disclosure choice. The mutex with the
-    // API-key disclosure means only one can be open at a time, so opening
-    // Advanced here also implies the key disclosure stays closed (its default).
-    if (state.advancedExpanded) {
-      advToggle.setAttribute('aria-expanded', 'true');
-      advancedGrid.hidden = false;
+    updateResetAllVisibility();
+  }
+
+  function computeAvailableSections(firstRun, invalid, experimental) {
+    var out = ['advanced'];
+    if (!experimental && !firstRun && !invalid) {
+      out.unshift('usage');
     }
+    return out;
+  }
 
-    invalidBlock.hidden = s !== STATE.INVALIDKEY;
-    dimmable.classList.toggle('dimmed', s === STATE.INVALIDKEY);
-
+  function renderUsageNumbers(over) {
     usageMonthEl.textContent = 'Usage · ' + currentMonthLabel();
     usageSvEl.textContent = fmt(state.monthSv);
     usageCapDisplayEl.textContent = fmt(state.cap);
@@ -156,26 +233,25 @@ document.addEventListener('DOMContentLoaded', function () {
     usageBarFill.style.width = pct + '%';
 
     var ratio = state.cap > 0 ? state.monthSv / state.cap : 0;
-    var isOver = s === STATE.OVERQUOTA;
-    var isWarn = !isOver && ratio > 0.9;
-    usageSvEl.classList.toggle('hero-used-warn', isWarn);
-    usageSvEl.classList.toggle('hero-used-danger', isOver);
+    var isWarn = !over && ratio > 0.9;
+    usageSvEl.classList.toggle('usage-used-warn', isWarn);
+    usageSvEl.classList.toggle('usage-used-danger', over);
     usageBarFill.classList.toggle('hero-bar-warn', isWarn);
-    usageBarFill.classList.toggle('hero-bar-danger', isOver);
+    usageBarFill.classList.toggle('hero-bar-danger', over);
 
-    overCapLabel.hidden = !isOver;
+    overCapLabel.hidden = !over;
 
     usageSvCachedEl.textContent = fmt(state.monthSvCached);
     usageGeoEl.textContent = fmt(state.monthGeo);
 
-    overQuotaNotice.hidden = !isOver;
-    if (isOver) nextResetDateEl.textContent = nextResetLabel();
+    overQuotaNotice.hidden = !over;
+    if (over) nextResetDateEl.textContent = nextResetLabel();
 
     var rateLimited = !!state.rateLimitedAt &&
       (Date.now() - state.rateLimitedAt) < RATE_LIMIT_WINDOW_MS;
-    rateLimitNotice.hidden = isOver || !rateLimited;
+    rateLimitNotice.hidden = over || !rateLimited;
 
-    activePagePill.hidden = s !== STATE.ACTIVE || rateLimited;
+    activePagePill.hidden = over || rateLimited;
     sessionSvEl.textContent = fmt(state.sessionSv);
     sessionSvCachedEl.textContent = fmt(state.sessionSvCached);
     sessionGeoEl.textContent = fmt(state.sessionGeo);
@@ -199,14 +275,28 @@ document.addEventListener('DOMContentLoaded', function () {
     state.sessionGeo = (s && s.geocode) || 0;
   }
 
-  // Coalesce three independent storage reads into one initial render.
-  var pendingReads = 3;
-  function initialReadDone() { if (--pendingReads === 0) render(); }
+  // Coalesce four independent state reads (sync settings, local counters,
+  // session-per-tab, preview-state round-trip) into one initial render. After
+  // that render commits, drop the .popup-loading class on next frame so the
+  // switch/mode-card transitions only fire for user-driven changes — not for
+  // the storage-to-DOM flip on every popup open.
+  var pendingReads = 4;
+  function initialReadDone() {
+    if (--pendingReads === 0) {
+      render();
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          document.body.classList.remove('popup-loading');
+        });
+      });
+    }
+  }
 
   chrome.storage.sync.get(
     ['apiKey', 'radius', 'apiCap', 'apiCapEnabled',
      'bucketMeters', 'skipThresholdMeters', 'dwellMs',
-     'popupAdvancedExpanded', 'useExperimentalPreview', 'verboseDebug',
+     'popupOpenSection', 'popupAdvancedExpanded',
+     'useExperimentalPreview', 'verboseDebug',
      'viewportW', 'viewportH', 'tilePx', 'horizonNudgePx'],
     function (result) {
       state.apiKey = result.apiKey || '';
@@ -220,9 +310,35 @@ document.addEventListener('DOMContentLoaded', function () {
       state.capEnabled = result.apiCapEnabled !== false;
       apiCapInput.value = state.cap;
       apiCapEnabledInput.checked = state.capEnabled;
-      state.advancedExpanded = !!result.popupAdvancedExpanded;
-      useExperimentalPreviewInput.checked = result.useExperimentalPreview === true; // default false (opt-in)
-      verboseDebugInput.checked = !!result.verboseDebug; // default false
+
+      // Migrate popupAdvancedExpanded → popupOpenSection on the fly. The new
+      // key is authoritative once set (including '' = explicitly closed); the
+      // legacy key only seeds the initial value when popupOpenSection is
+      // entirely absent from storage. The v5d 'apikey' section was folded
+      // into 'usage' in v5e, so persisted 'apikey' maps onto that.
+      if (typeof result.popupOpenSection === 'string') {
+        var stored = result.popupOpenSection;
+        if (stored === 'apikey') stored = 'usage';
+        state.openSection = SECTIONS.indexOf(stored) !== -1 ? stored : null;
+      } else if (result.popupAdvancedExpanded) {
+        state.openSection = 'advanced';
+      } else {
+        state.openSection = null; // render() picks a default per mode/state
+      }
+
+      // Default mode: experimental for new users, apikey if a key is already
+      // configured (so existing API-key users aren't flipped to experimental
+      // on their next popup open). Write-back once so the value becomes
+      // sticky and visible in storage; subsequent reads short-circuit.
+      var hasModeFlag = typeof result.useExperimentalPreview === 'boolean';
+      var wantExperimental = hasModeFlag
+        ? result.useExperimentalPreview === true
+        : !state.apiKey;
+      if (!hasModeFlag) {
+        chrome.storage.sync.set({ useExperimentalPreview: wantExperimental });
+      }
+      applyMode(wantExperimental ? 'experimental' : 'apikey');
+      verboseDebugInput.checked = !!result.verboseDebug;
       viewportWInput.value = numOr(result.viewportW, DEFAULT_VIEWPORT_W);
       viewportHInput.value = numOr(result.viewportH, DEFAULT_VIEWPORT_H);
       tilePxInput.value = numOr(result.tilePx, DEFAULT_TILE_PX);
@@ -231,26 +347,24 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   );
 
-  useExperimentalPreviewInput.addEventListener('change', function () {
-    chrome.storage.sync.set({ useExperimentalPreview: useExperimentalPreviewInput.checked });
-  });
+  // Mode picker click handlers — both buttons write useExperimentalPreview.
+  function setModeFromClick(mode) {
+    applyMode(mode);
+    chrome.storage.sync.set({ useExperimentalPreview: state.mode === 'experimental' });
+    render();
+  }
+  modeExperimentalBtn.addEventListener('click', function () { setModeFromClick('experimental'); });
+  modeApiKeyBtn.addEventListener('click', function () { setModeFromClick('apikey'); });
 
   verboseDebugInput.addEventListener('change', function () {
     chrome.storage.sync.set({ verboseDebug: verboseDebugInput.checked });
   });
 
-  // ---- Preview on/off toggle ----
-  // The toggle has two paths: when the popup is opened on an RWGPS tab the
-  // content script owns the live state (round-trip via runtime messages);
-  // otherwise we fall back to writing previewEnabledViewer directly so the
-  // button still controls the persisted default.
-  function renderPreviewToggle(enabled) {
-    previewToggleBtn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
-    previewToggleLabelEl.textContent = enabled
-      ? 'Disable Street View preview'
-      : 'Enable Street View preview';
-  }
-
+  // ---- Preview on/off switch (header) ----
+  // When opened on an RWGPS tab the content script owns the live state
+  // (round-trip via runtime messages); otherwise we fall back to writing
+  // previewEnabledViewer directly so the button still controls the
+  // persisted default.
   function withActiveTab(cb) {
     chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
       var tabId = tabs[0] && tabs[0].id;
@@ -267,7 +381,9 @@ document.addEventListener('DOMContentLoaded', function () {
           return;
         }
         previewMode = response.mode || null;
-        renderPreviewToggle(!!response.enabled);
+        state.previewEnabled = !!response.enabled;
+        renderHeaderToggle();
+        initialReadDone();
       });
     });
   }
@@ -275,14 +391,16 @@ document.addEventListener('DOMContentLoaded', function () {
   function renderPreviewFromStorage() {
     previewMode = null;
     chrome.storage.sync.get(['previewEnabledViewer'], function (result) {
-      renderPreviewToggle(result.previewEnabledViewer !== false);
+      state.previewEnabled = result.previewEnabledViewer !== false;
+      renderHeaderToggle();
+      initialReadDone();
     });
   }
 
   previewToggleBtn.addEventListener('click', function () {
-    var current = previewToggleBtn.getAttribute('aria-pressed') === 'true';
-    var next = !current;
-    renderPreviewToggle(next); // optimistic
+    var next = !state.previewEnabled;
+    state.previewEnabled = next; // optimistic
+    renderHeaderToggle();
     withActiveTab(function (tabId) {
       if (tabId == null) {
         chrome.storage.sync.set({ previewEnabledViewer: next });
@@ -296,7 +414,8 @@ document.addEventListener('DOMContentLoaded', function () {
           return;
         }
         previewMode = response.mode || previewMode;
-        renderPreviewToggle(!!response.enabled);
+        state.previewEnabled = !!response.enabled;
+        renderHeaderToggle();
       });
     });
   });
@@ -375,49 +494,29 @@ document.addEventListener('DOMContentLoaded', function () {
   bindEyeToggle(keyEye, keyEyeIcon, apiKeyInput);
   bindEyeToggle(apiKeyOnboardEye, apiKeyOnboardEyeIcon, apiKeyOnboardInput);
 
-  function bindDisclosure(btn, panel, group) {
+  // Single-open accordion: clicking any section toggle opens it and
+  // closes the others. Clicking an already-open section closes it.
+  function bindSection(btn, sectionId) {
     btn.addEventListener('click', function () {
-      var open = btn.getAttribute('aria-expanded') === 'true';
-      btn.setAttribute('aria-expanded', open ? 'false' : 'true');
-      panel.hidden = open;
-      if (!open && group) {
-        group.forEach(function (other) {
-          if (other.btn !== btn) {
-            other.btn.setAttribute('aria-expanded', 'false');
-            other.panel.hidden = true;
-          }
-        });
-      }
+      var next = (state.openSection === sectionId) ? null : sectionId;
+      setSectionOpen(next);
+      chrome.storage.sync.set({ popupOpenSection: next == null ? '' : next });
     });
   }
-  var bodyGroup = [
-    { btn: advToggle, panel: advancedGrid },
-    { btn: keyToggle, panel: keyField }
-  ];
-  bindDisclosure(advToggle, advancedGrid, bodyGroup);
-  bindDisclosure(keyToggle, keyField, bodyGroup);
-  bindDisclosure(howToToggle, howToList);
+  bindSection(usageToggle, 'usage');
+  bindSection(advToggle, 'advanced');
 
-  // Persist the Advanced disclosure across popup opens. Listens on both
-  // bodyGroup buttons because clicking the API-key toggle closes Advanced via
-  // the mutex inside bindDisclosure (which already ran by the time this fires).
-  function persistAdvancedExpanded() {
-    var open = advToggle.getAttribute('aria-expanded') === 'true';
-    chrome.storage.sync.set({ popupAdvancedExpanded: open });
-  }
-  advToggle.addEventListener('click', persistAdvancedExpanded);
-  keyToggle.addEventListener('click', persistAdvancedExpanded);
+  // How-to disclosure (firstrun) is independent — toggles its own list only.
+  howToToggle.addEventListener('click', function () {
+    var open = howToToggle.getAttribute('aria-expanded') === 'true';
+    howToToggle.setAttribute('aria-expanded', open ? 'false' : 'true');
+    howToList.hidden = open;
+  });
 
   replaceKeyBtn.addEventListener('click', function () {
     chrome.storage.sync.set({ apiKey: '' });
     chrome.storage.local.remove(['apiKeyInvalid']);
     apiKeyOnboardInput.focus();
-  });
-
-  keyDelete.addEventListener('click', function () {
-    apiKeyInput.value = '';
-    chrome.storage.sync.set({ apiKey: '' });
-    chrome.storage.local.remove(['apiKeyInvalid']);
   });
 
   resetBtn.addEventListener('click', function () {
@@ -443,6 +542,27 @@ document.addEventListener('DOMContentLoaded', function () {
   bindNumberSave(bucketMetersInput, 'bucketMeters', function (v) { return v >= 0 && v <= 100; });
   bindNumberSave(skipThresholdMetersInput, 'skipThresholdMeters', function (v) { return v >= 0 && v <= 200; });
   bindNumberSave(dwellMsInput, 'dwellMs', function (v) { return v >= 0 && v <= 1000; });
+
+  // "Reset all to defaults" — visibility tied to whether any tunable differs.
+  // Drops the four storage keys; the existing storage.onChanged listener
+  // mirrors the defaults back into the inputs and re-runs visibility.
+  var TUNABLES = [
+    { input: radiusInput, key: 'radius', def: DEFAULT_RADIUS },
+    { input: bucketMetersInput, key: 'bucketMeters', def: DEFAULT_BUCKET_METERS },
+    { input: skipThresholdMetersInput, key: 'skipThresholdMeters', def: DEFAULT_SKIP_THRESHOLD_METERS },
+    { input: dwellMsInput, key: 'dwellMs', def: DEFAULT_DWELL_MS }
+  ];
+  function updateResetAllVisibility() {
+    var anyModified = TUNABLES.some(function (t) {
+      var v = parseInt(t.input.value, 10);
+      return !isNaN(v) && v !== t.def;
+    });
+    advResetAll.hidden = !anyModified;
+  }
+  TUNABLES.forEach(function (t) { t.input.addEventListener('input', updateResetAllVisibility); });
+  advResetAllBtn.addEventListener('click', function () {
+    chrome.storage.sync.remove(TUNABLES.map(function (t) { return t.key; }));
+  });
   bindNumberSave(viewportWInput, 'viewportW', function (v) { return v >= 200 && v <= 900; });
   bindNumberSave(viewportHInput, 'viewportH', function (v) { return v >= 150 && v <= 600; });
   bindNumberSave(tilePxInput, 'tilePx', function (v) { return v >= 80 && v <= 800; });
@@ -482,6 +602,10 @@ document.addEventListener('DOMContentLoaded', function () {
         apiCapEnabledInput.checked = state.capEnabled;
         changed = true;
       }
+      if (changes.useExperimentalPreview) {
+        applyMode(changes.useExperimentalPreview.newValue === true ? 'experimental' : 'apikey');
+        changed = true;
+      }
       if (changes.bucketMeters) syncInputValue(bucketMetersInput, numOr(changes.bucketMeters.newValue, DEFAULT_BUCKET_METERS));
       if (changes.skipThresholdMeters) syncInputValue(skipThresholdMetersInput, numOr(changes.skipThresholdMeters.newValue, DEFAULT_SKIP_THRESHOLD_METERS));
       if (changes.dwellMs) syncInputValue(dwellMsInput, numOr(changes.dwellMs.newValue, DEFAULT_DWELL_MS));
@@ -493,10 +617,9 @@ document.addEventListener('DOMContentLoaded', function () {
       if (changes.verboseDebug) verboseDebugInput.checked = !!changes.verboseDebug.newValue;
       // Mirror viewer-mode preview toggles. Editor-mode state lives only in
       // the content script's memory so there's no storage event to listen for.
-      // Mirror viewer-mode and storage-fallback states. Editor-mode is the
-      // only context where the popup's truth source isn't this storage key.
       if (changes.previewEnabledViewer && previewMode !== 'editor') {
-        renderPreviewToggle(changes.previewEnabledViewer.newValue !== false);
+        state.previewEnabled = changes.previewEnabledViewer.newValue !== false;
+        renderHeaderToggle();
       }
     }
     if (area === 'local') {

@@ -4,10 +4,10 @@
 
 Chrome extension (Manifest V3) that shows a Google Street View overlay when hovering over routes on ridewithgps.com. Works when Google Maps is selected as the map type in the RWGPS route editor.
 
-Two image pipelines, switchable via the popup's top-of-screen toggle (`useExperimentalPreview` in `chrome.storage.sync`, default `false` — opt-in). Internally the experimental path is still called the "free-tile" path in some variable names and design docs; the `useExperimentalPreview` rename is the user-facing/CWS-review-facing framing:
+Two image pipelines, switchable via the popup's top-of-screen mode picker (`useExperimentalPreview` in `chrome.storage.sync`). **Default mode is computed on first popup open:** `true` (experimental) when no `apiKey` is set, `false` (apikey) when one is. The popup migrates the computed default into storage once, so the value is sticky after that. Internally the experimental path is still called the "free-tile" path in some variable names and design docs; the `useExperimentalPreview` rename is the user-facing/CWS-review-facing framing:
 
-- **Static API pipeline (default).** Uses `maps.googleapis.com/maps/api/streetview` with the user's API key, gated by a configurable monthly cap. The originally shipped v1 path and what every CWS-approved release through v1.1.1 has run on. Solid, long-term stable.
-- **Experimental preview pipeline (opt-in).** Uses `streetviewpixels-pa.googleapis.com/v1/tile` — the panorama image tile endpoint the Maps JS street-view renderer pulls from. 3×2 stitched tile grid (4 of which are usually visible) with sub-tile horizontal centering on the route heading. Design source of truth: `docs/design/streetviewpixels/README.md`. Default off because the endpoint is internal-ish and at risk of breakage; user must opt in via popup checkbox.
+- **Static API pipeline.** Uses `maps.googleapis.com/maps/api/streetview` with the user's API key, gated by a configurable monthly cap. The originally shipped v1 path and what every CWS-approved release through v1.1.1 has run on. Solid, long-term stable. Auto-selected for users who already have an API key set.
+- **Experimental preview pipeline (default for new users).** Uses `streetviewpixels-pa.googleapis.com/v1/tile` — the panorama image tile endpoint the Maps JS street-view renderer pulls from. 3×2 stitched tile grid (4 of which are usually visible) with sub-tile horizontal centering on the route heading. Design source of truth: `docs/design/streetviewpixels/README.md`. The endpoint is internal-ish and at risk of breakage, but the no-API-key UX wins for first-run users; existing apikey users keep the static path.
 
 ## Architecture
 

@@ -151,7 +151,12 @@
       previewEnabled = mode === 'viewer'
         ? result.previewEnabledViewer !== false  // viewer default: ON
         : false;                                 // editor: always OFF on load
-      useExperimentalPreview = result.useExperimentalPreview === true; // default false (opt-in)
+      // Default mode: experimental for new users (no apiKey set), apikey if a
+      // key is already set. Once the popup migrates the value to storage,
+      // subsequent reads pick up the explicit boolean.
+      useExperimentalPreview = typeof result.useExperimentalPreview === 'boolean'
+        ? result.useExperimentalPreview === true
+        : !apiKey;
       radius = result.radius || DEFAULT_RADIUS;
       bucketMeters = numOr(result.bucketMeters, DEFAULT_BUCKET_METERS);
       skipThresholdMeters = numOr(result.skipThresholdMeters, DEFAULT_SKIP_THRESHOLD_METERS);

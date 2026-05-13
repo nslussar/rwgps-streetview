@@ -1,0 +1,72 @@
+/* Shared styles for popup variations — Chrome extension popup chrome */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: #f4f3ef;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Generic popup frame — square corners like real Chrome popups */
+.popup {
+  background: #ffffff;
+  overflow: hidden;
+  box-shadow:
+    0 1px 0 rgba(0,0,0,0.04),
+    0 8px 24px -6px rgba(15,15,20,0.18),
+    0 24px 60px -20px rgba(15,15,20,0.22);
+  font-family: 'Inter', system-ui, sans-serif;
+  font-weight: 400;
+  color: #131418;
+}
+.popup *,
+.popup button,
+.popup input,
+.popup label,
+.popup kbd,
+.popup textarea,
+.popup select {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-feature-settings: 'ss01';
+}
+
+/* Hide spin buttons on number inputs */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type=number] { -moz-appearance: textfield; }
+
+input:focus, button:focus, textarea:focus { outline: none; }
+
+/* Artboard label container — keeps multi-state mocks side-by-side */
+.states-row {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 1px 1px, rgba(0,0,0,0.06) 1px, transparent 0) 0 0 / 16px 16px,
+    #faf9f6;
+}
+
+.state-col { display: flex; flex-direction: column; gap: 10px; }
+.state-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6a6f7a;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-family: 'Geist Mono', 'JetBrains Mono', monospace;
+}
+
+/* Common building blocks */
+.row { display: flex; align-items: center; }
+.between { justify-content: space-between; }
+.gap-2 { gap: 8px; } .gap-3 { gap: 12px; } .gap-4 { gap: 16px; }
+.muted { color: #6a6f7a; }
+.mono { font-family: 'Geist Mono', 'JetBrains Mono', ui-monospace, monospace; font-feature-settings: 'tnum' 1; }
+.tnum { font-variant-numeric: tabular-nums; }

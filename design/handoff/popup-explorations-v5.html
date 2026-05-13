@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Street View Preview — popup v5</title>
+<link rel="stylesheet" href="popup-styles.css" />
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="popup-primitives.jsx"></script>
+<script type="text/babel" src="v-final3.jsx"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+function StateRow({ items }) {
+  return (
+    <div className="states-row">
+      {items.map((item, i) => (
+        <div key={i} className="state-col">
+          <div className="state-label">{item.label}</div>
+          <VFinal3Popup {...item.props} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Brief() {
+  return (
+    <div style={{ width: 760, padding: 28, background: '#fff', borderRadius: 12, border: '1px solid #eef0f3', fontFamily: 'Inter Tight, system-ui, sans-serif', color: '#131418', lineHeight: 1.55 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.08, textTransform: 'uppercase', color: '#6a6f7a' }}>Chrome extension popup · v5</div>
+      <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4, letterSpacing: -0.01 }}>Adding: experimental mode, enable toggle, verbose logging</div>
+      <div style={{ fontSize: 13, color: '#33363d', marginTop: 10 }}>
+        Four changes from the previous handoff:
+      </div>
+      <ol style={{ fontSize: 13, color: '#33363d', marginTop: 8, paddingLeft: 18, lineHeight: 1.7 }}>
+        <li><b>Mode picker</b> — segmented control near top. Switches between Experimental (no key) and API key. Body changes to match. API key input only appears in API key mode.</li>
+        <li><b>Disabled state</b> — when off, the body dims to 40% and ignores clicks. Header + toggle row stay live.</li>
+        <li><b>Enable toggle</b> — replaces the giant red button with a labeled switch + <kbd>S</kbd> shortcut hint. Lives in its own status row below the header. Color reflects state (green dot when on), not action.</li>
+        <li><b>Verbose logging</b> — moved into Advanced under a "debug" subheading. Belongs with the other tuning knobs.</li>
+        <li><b>Usage collapsible</b> — counter section is now a disclosure matching Advanced and API key. Collapsed by default; summary shown on the right.</li>
+      </ol>
+    </div>
+  );
+}
+
+const App = () => (
+  <DesignCanvas>
+    <DCSection id="brief" title="Brief" subtitle="What's new in v5">
+      <DCArtboard id="brief" label="Overview" width={820} height={400}>
+        <Brief />
+      </DCArtboard>
+    </DCSection>
+
+    <DCSection id="firstrun" title="First run · mode choice" subtitle="User picks mode before seeing detail">
+      <DCArtboard id="firstrun" label="2 modes · 360px popup" width={860} height={780}>
+        <StateRow items={[
+          { label: 'Experimental selected (default)', props: { state: 'firstrun', mode: 'experimental', enabled: true } },
+          { label: 'API key selected', props: { state: 'firstrun', mode: 'apikey', enabled: true } },
+        ]} />
+      </DCArtboard>
+    </DCSection>
+
+    <DCSection id="active" title="Active states" subtitle="After mode is committed · Usage + Advanced collapsed by default">
+      <DCArtboard id="active" label="3 views · 360px popup" width={1240} height={780}>
+        <StateRow items={[
+          { label: 'Experimental · active', props: { state: 'active', mode: 'experimental', enabled: true } },
+          { label: 'API key · active', props: { state: 'apikey_active', mode: 'apikey', enabled: true } },
+          { label: 'API key · all expanded', props: { state: 'apikey_expanded', mode: 'apikey', enabled: true } },
+        ]} />
+      </DCArtboard>
+    </DCSection>
+
+    <DCSection id="disabled" title="Disabled state" subtitle="Body dims to 40% when toggle is off">
+      <DCArtboard id="disabled" label="2 modes · disabled" width={860} height={580}>
+        <StateRow items={[
+          { label: 'Experimental · disabled', props: { state: 'active', mode: 'experimental', enabled: false } },
+          { label: 'API key · disabled', props: { state: 'apikey_active', mode: 'apikey', enabled: false } },
+        ]} />
+      </DCArtboard>
+    </DCSection>
+
+  </DesignCanvas>
+);
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
