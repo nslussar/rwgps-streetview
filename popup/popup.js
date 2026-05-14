@@ -334,9 +334,17 @@ document.addEventListener('DOMContentLoaded', function () {
   );
 
   // Mode picker click handlers — both buttons write useExperimentalPreview.
+  // Switching INTO apikey mode also force-opens the Google Maps API section
+  // (overriding any persisted openSection like 'advanced'), so users land on
+  // the usage meter / API key field instead of whatever was open last.
   function setModeFromClick(mode) {
     applyMode(mode);
-    chrome.storage.sync.set({ useExperimentalPreview: state.mode === 'experimental' });
+    var sync = { useExperimentalPreview: state.mode === 'experimental' };
+    if (state.mode === 'apikey') {
+      state.openSection = 'usage';
+      sync.popupOpenSection = 'usage';
+    }
+    chrome.storage.sync.set(sync);
     render();
   }
   modeExperimentalBtn.addEventListener('click', function () { setModeFromClick('experimental'); });
