@@ -82,7 +82,7 @@ The default path. Bypasses the Street View Static API and uses the same un-keyed
 - **Source filter: `StreetViewSource.OUTDOOR`.** Admits both Google SV-car captures (type-2, rendered via the `streetviewpixels-pa` tile grid above) AND user-contributed photospheres (type-10, panoids look like `CAoSFkNJSE0w...` — base64-wrapped protobuf with type byte 10). Excludes type-2 indoor "Business View" panoramas. Type-10 panoramas are NOT served by `streetviewpixels-pa` (they live in `lh3.googleusercontent.com/gpms-cs-s/...`) so the bridge routes them through a separate render path — see the photospheres spec (`docs/superpowers/specs/2026-05-07-photospheres-ugc-rendering-design.md`).
 - **`StreetViewService` resolution** (`page-bridge.js:getStreetViewLib`). RWGPS uses the new dynamic Maps JS loader, where `google.maps.StreetViewService` may NOT be on the global synchronously even when `google.maps` is. Try the legacy global first, then fall back to `await google.maps.importLibrary('streetView')`. Cache the resolved library object so subsequent `LOOKUP_PANO` requests are zero-cost. Note: the existing constructor hooks (`Map`, `Polyline`, `Marker`) still work because RWGPS pulls in those libraries before our content script gets a chance to ask for `StreetViewService`.
 - **Existing throttling levers still apply.** `bucketMeters` / `skipThresholdMeters` / `dwellMs` reduce panorama-lookup rate the same way they reduced Static API request rate. Browser caches both the metadata fetches and the tile fetches.
-- **Overlay layout** (`overlay.css`). The 3×2 `<img>` grid lives in `.sv-tiles`, a 600×400 inner box positioned `top: -75px; left: 0;` relative to the 400×250 overlay. Each tile is 200×200 in two rows of three. JS sets `translateX(-200 * frac)` for sub-tile horizontal centering. **Debug black borders are still on** — strip `border: 1px solid #000` on `.sv-tile` once the geometry is locked in for production.
+- **Overlay layout** (`overlay.css`). The 3×2 `<img>` grid lives in `.sv-tiles`, a 600×400 inner box positioned `top: -75px; left: 0;` relative to the 400×250 overlay. Each tile is 200×200 in two rows of three. JS sets `translateX(-200 * frac)` for sub-tile horizontal centering.
 
 ## Lookup reliability: retry + SIS rescue
 
@@ -102,7 +102,6 @@ Maps JS `StreetViewService.getPanorama()` has a coord-specific stale-cache (or s
 
 ## Open follow-ups (experimental preview pipeline)
 
-- **Strip debug tile borders** in `overlay.css`.
 - **Popup state machine.** The FIRSTRUN screen still demands an API key when none is set. With the experimental toggle defaulting to OFF (opt-in) the FIRSTRUN flow is the correct primary onboarding — leave as is.
 - **Cap UI / counter UI** is the canonical default-mode UX, since the experimental path is opt-in and the API-key path remains the primary supported behavior. No work needed here.
 - **Heading granularity is still ±1 tile worth** at panorama level — for non-standard panoramas with fewer tiles per 360°, individual tiles cover MORE degrees, so visible bias may grow. Sub-tile shift compensates the residual within a tile, but at the *seam between two panoramas* with mismatched coverage there's no fix short of zoom=5 (16 tiles per render — too many requests).
