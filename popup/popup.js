@@ -65,6 +65,12 @@ document.addEventListener('DOMContentLoaded', function () {
   var sessionSvCachedEl = $('sessionSvCached');
   var sessionGeoEl = $('sessionGeo');
   var resetBtn = $('resetUsage');
+  var setBtn = $('setUsage');
+  var usageEyebrow = $('usageEyebrow');
+  var usageSetRow = $('usageSetRow');
+  var usageSetInput = $('usageSetInput');
+  var usageSetSave = $('usageSetSave');
+  var usageSetCancel = $('usageSetCancel');
 
   // Cap row (now lives inside the Google Maps API disclosure panel)
   var apiCapInput = $('apiCap');
@@ -521,6 +527,44 @@ document.addEventListener('DOMContentLoaded', function () {
 
   resetBtn.addEventListener('click', function () {
     chrome.runtime.sendMessage({ type: RwgpsUsage.RESET_MSG });
+  });
+
+  function showSetRow() {
+    usageSetInput.value = String(state.monthSv);
+    usageSetInput.removeAttribute('aria-invalid');
+    usageEyebrow.hidden = true;
+    usageSetRow.hidden = false;
+    usageSetInput.focus();
+    usageSetInput.select();
+  }
+  function hideSetRow() {
+    usageSetRow.hidden = true;
+    usageEyebrow.hidden = false;
+    setBtn.focus();
+  }
+  function commitSet() {
+    // type="number" sanitizes commas/letters out of .value, but `step="1"`
+    // is advisory — a typed "1.5" still reaches us. Reject anything that
+    // isn't a non-negative integer to avoid silent parseInt truncation.
+    var raw = (usageSetInput.value || '').trim();
+    if (!/^\d+$/.test(raw)) {
+      usageSetInput.setAttribute('aria-invalid', 'true');
+      usageSetInput.focus();
+      usageSetInput.select();
+      return;
+    }
+    chrome.runtime.sendMessage({ type: RwgpsUsage.SET_MSG, streetviewNetwork: parseInt(raw, 10) });
+    hideSetRow();
+  }
+  setBtn.addEventListener('click', showSetRow);
+  usageSetSave.addEventListener('click', commitSet);
+  usageSetCancel.addEventListener('click', hideSetRow);
+  usageSetInput.addEventListener('input', function () {
+    usageSetInput.removeAttribute('aria-invalid');
+  });
+  usageSetInput.addEventListener('keydown', function (event) {
+    if (event.key === 'Enter') { event.preventDefault(); commitSet(); }
+    else if (event.key === 'Escape') { event.preventDefault(); hideSetRow(); }
   });
 
   apiCapEnabledInput.addEventListener('change', function () {

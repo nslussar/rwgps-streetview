@@ -411,6 +411,60 @@ body.popup-loading .mode-radio-dot { transition: none !important; }
   cursor: pointer;
 }
 .link-btn:hover { text-decoration: underline; }
+.link-btn-dim { color: var(--dim); }
+
+/* Set/Reset action cluster — two link-btns separated by a "|". */
+.usage-eyebrow-actions {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.link-sep {
+  color: var(--field-border);
+  font-size: 13px;
+  font-weight: 400;
+  user-select: none;
+}
+
+/* Inline edit row that replaces the eyebrow while the user is entering
+   a Cloud-Console-sourced count. Mirrors the eyebrow's row height and
+   color treatment so the swap doesn't shift the panel vertically. */
+.usage-set-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.usage-set-label {
+  font-size: 13px;
+  color: var(--dim);
+  font-weight: 500;
+}
+.usage-set-row input {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--field-border);
+  border-radius: 4px;
+  font-size: 13px;
+  text-align: right;
+  color: var(--value-ink);
+  -moz-appearance: textfield;
+}
+.usage-set-row input:focus { outline: none; border-color: var(--accent); }
+.usage-set-row input[aria-invalid="true"] { border-color: var(--danger); }
+.usage-set-row input::-webkit-outer-spin-button,
+.usage-set-row input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.usage-set-actions {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+}
 
 .over-cap-label {
   font-size: 13px;

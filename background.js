@@ -154,6 +154,26 @@ function resetMonthly() {
   });
 }
 
+// Override the billable monthly counter with a value the user copied from
+// Google Cloud Console (Billing → Reports → Static Street View SKU). Only
+// touches streetviewNetwork — cached + geocode are local stats with no
+// authoritative external source, so pending deltas for those fields are
+// preserved while pending network increments are dropped (they're now
+// subsumed by the user's chosen value).
+function setMonthlyNetwork(value) {
+  if (typeof value !== 'number' || !isFinite(value) || value < 0) return;
+  var target = Math.floor(value);
+  for (var tabId in perTabDeltas) perTabDeltas[tabId].network = 0;
+  if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+  ensureLoaded(function () {
+    var month = RwgpsUsage.currentMonth();
+    if (cachedUsage.month !== month) cachedUsage = RwgpsUsage.emptyUsage();
+    if (cachedUsage.streetviewNetwork === target) return;
+    cachedUsage.streetviewNetwork = target;
+    chrome.storage.local.set({ apiUsage: cachedUsage });
+  });
+}
+
 chrome.runtime.onStartup.addListener(resetAllSessions);
 chrome.runtime.onInstalled.addListener(resetAllSessions);
 
@@ -210,5 +230,7 @@ chrome.runtime.onMessage.addListener(function (msg, sender) {
     if (tabId != null) resetTab(tabId);
   } else if (msg.type === RwgpsUsage.RESET_MSG) {
     resetMonthly();
+  } else if (msg.type === RwgpsUsage.SET_MSG) {
+    setMonthlyNetwork(msg.streetviewNetwork);
   }
 });

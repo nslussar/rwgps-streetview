@@ -64,10 +64,20 @@ test('DEFAULT_CAP: matches Google free tier of 10000', () => {
 });
 
 test('message-type constants are non-empty strings', () => {
-  for (const key of ['GEOCODE_MSG', 'RESET_MSG', 'PAGE_LOAD_MSG']) {
+  for (const key of ['GEOCODE_MSG', 'RESET_MSG', 'SET_MSG', 'PAGE_LOAD_MSG']) {
     const v = RwgpsUsage[key];
     assert.equal(typeof v, 'string');
     assert.ok(v.length > 0, key + ' is empty');
+  }
+});
+
+test('message-type constants are mutually distinct', () => {
+  const keys = ['GEOCODE_MSG', 'RESET_MSG', 'SET_MSG', 'PAGE_LOAD_MSG'];
+  const seen = new Set();
+  for (const key of keys) {
+    const v = RwgpsUsage[key];
+    assert.ok(!seen.has(v), 'duplicate value: ' + v);
+    seen.add(v);
   }
 });
 

@@ -130,9 +130,24 @@
             </span>
           </button>
           <div id="usagePanel" class="usage-panel" hidden>
-            <div class="usage-eyebrow">
+            <div id="usageEyebrow" class="usage-eyebrow">
               <span id="usageMonth">Usage</span>
-              <button id="resetUsage" type="button" class="link-btn" title="Reset monthly counters">Reset</button>
+              <span class="usage-eyebrow-actions">
+                <button id="setUsage" type="button" class="link-btn" title="Sync the monthly counter to the value reported by Google Cloud Console">Set</button>
+                <span class="link-sep" aria-hidden="true">|</span>
+                <button id="resetUsage" type="button" class="link-btn" title="Reset monthly counters">Reset</button>
+              </span>
+            </div>
+            <!-- Inline edit row, shown in place of the eyebrow when the user
+                 clicks "Set". Lets them paste a billable count from Cloud
+                 Console (Billing → Reports → Static Street View SKU). -->
+            <div id="usageSetRow" class="usage-set-row" hidden>
+              <label for="usageSetInput" class="usage-set-label">Set to</label>
+              <input id="usageSetInput" type="number" min="0" step="1" inputmode="numeric">
+              <span class="usage-set-actions">
+                <button id="usageSetSave" type="button" class="link-btn">Save</button>
+                <button id="usageSetCancel" type="button" class="link-btn link-btn-dim">Cancel</button>
+              </span>
             </div>
             <div class="hero-bar"><div id="usageBarFill" class="hero-bar-fill"></div></div>
             <div class="hero-scale">
