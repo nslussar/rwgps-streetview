@@ -70,3 +70,65 @@ test('message-type constants are non-empty strings', () => {
     assert.ok(v.length > 0, key + ' is empty');
   }
 });
+
+test('normalizeStoredUsage: undefined input → emptyUsage, no write', () => {
+  const { usage, changed } = RwgpsUsage.normalizeStoredUsage(undefined);
+  assert.equal(usage.streetviewNetwork, 0);
+  assert.equal(usage.streetviewCached, 0);
+  assert.equal(usage.geocode, 0);
+  assert.equal(usage.month, RwgpsUsage.currentMonth());
+  assert.equal(changed, false);
+});
+
+test('normalizeStoredUsage: current-format object passes through unchanged', () => {
+  const input = { month: '2026-05', streetviewNetwork: 500, streetviewCached: 200, geocode: 10 };
+  const { usage, changed } = RwgpsUsage.normalizeStoredUsage(input);
+  assert.equal(usage.streetviewNetwork, 500);
+  assert.equal(usage.streetviewCached, 200);
+  assert.equal(usage.geocode, 10);
+  assert.equal(usage.month, '2026-05');
+  assert.equal(changed, false);
+});
+
+test('normalizeStoredUsage: legacy `streetview` migrates to `streetviewNetwork`', () => {
+  const input = { month: '2026-05', streetview: 500, geocode: 10 };
+  const { usage, changed } = RwgpsUsage.normalizeStoredUsage(input);
+  assert.equal(usage.streetviewNetwork, 500, 'counter must not be reset');
+  assert.equal(usage.streetview, undefined);
+  assert.equal(usage.geocode, 10);
+  assert.equal(usage.streetviewCached, 0);
+  assert.equal(changed, true);
+});
+
+test('normalizeStoredUsage: legacy migration does not mutate caller object', () => {
+  const input = { month: '2026-05', streetview: 500 };
+  RwgpsUsage.normalizeStoredUsage(input);
+  assert.equal(input.streetview, 500, 'caller object preserved');
+  assert.equal(input.streetviewNetwork, undefined);
+});
+
+test('normalizeStoredUsage: missing counter fields fill with 0 (NaN guard)', () => {
+  // A stored object missing streetviewNetwork would yield NaN on += in flush().
+  const input = { month: '2026-05', geocode: 7 };
+  const { usage, changed } = RwgpsUsage.normalizeStoredUsage(input);
+  assert.equal(usage.streetviewNetwork, 0);
+  assert.equal(usage.streetviewCached, 0);
+  assert.equal(usage.geocode, 7);
+  assert.equal(changed, true);
+});
+
+test('normalizeStoredUsage: both legacy and new fields → keep new, drop legacy', () => {
+  const input = { month: '2026-05', streetview: 99, streetviewNetwork: 500 };
+  const { usage, changed } = RwgpsUsage.normalizeStoredUsage(input);
+  assert.equal(usage.streetviewNetwork, 500);
+  assert.equal(usage.streetview, undefined);
+  assert.equal(changed, true);
+});
+
+test('normalizeStoredUsage: missing month falls back to current month', () => {
+  const input = { streetviewNetwork: 500 };
+  const { usage, changed } = RwgpsUsage.normalizeStoredUsage(input);
+  assert.equal(usage.month, RwgpsUsage.currentMonth());
+  assert.equal(usage.streetviewNetwork, 500, 'counter preserved');
+  assert.equal(changed, true);
+});

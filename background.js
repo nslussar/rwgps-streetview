@@ -55,22 +55,18 @@ function ensureLoaded(cb) {
   var pending = 2;
   function done() { if (--pending === 0) cb(); }
 
-  chrome.storage.local.get(['apiUsage', 'sessionApiUsage', 'migrationDone'], function (l) {
-    var u = l.apiUsage;
-    var migrated = false;
-    // One-time migration of legacy `streetview` field (which conflated cache + network).
-    // Treat as worst-case billed so the user isn't surprised by a sudden drop.
-    if (!l.migrationDone) {
-      if (u && u.streetview !== undefined && u.streetviewNetwork === undefined) {
-        u.streetviewNetwork = u.streetview;
-        delete u.streetview;
-        migrated = true;
-      }
+  chrome.storage.local.get(['apiUsage', 'sessionApiUsage'], function (l) {
+    // Normalize the stored counter on every boot: migrates the legacy
+    // `streetview` field and fills any missing numeric field with 0 so
+    // subsequent `+=` can't produce NaN. Only write back when something
+    // actually changed — preserves a non-zero counter across reloads even
+    // if a future read path races with a pending flush write.
+    var norm = RwgpsUsage.normalizeStoredUsage(l.apiUsage);
+    cachedUsage = norm.usage;
+    if (l.apiUsage !== undefined && norm.changed) {
+      chrome.storage.local.set({ apiUsage: cachedUsage });
     }
-    cachedUsage = u || RwgpsUsage.emptyUsage();
-    if (migrated || !l.migrationDone) {
-      // Drop the legacy global sessionApiUsage too while we're at it.
-      chrome.storage.local.set({ apiUsage: cachedUsage, migrationDone: true });
+    if (l.sessionApiUsage !== undefined) {
       chrome.storage.local.remove('sessionApiUsage');
     }
     done();
