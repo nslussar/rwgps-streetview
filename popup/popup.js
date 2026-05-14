@@ -540,7 +540,6 @@ document.addEventListener('DOMContentLoaded', function () {
   function hideSetRow() {
     usageSetRow.hidden = true;
     usageEyebrow.hidden = false;
-    setBtn.focus();
   }
   function commitSet() {
     // type="number" sanitizes commas/letters out of .value, but `step="1"`
