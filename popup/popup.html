@@ -133,6 +133,8 @@
             <div id="usageEyebrow" class="usage-eyebrow">
               <span id="usageMonth">Usage</span>
               <span class="usage-eyebrow-actions">
+                <a href="https://console.cloud.google.com/apis/dashboard" target="_blank" rel="noopener" class="link-btn" title="Open Google Cloud Console — APIs &amp; Services dashboard">Cloud Console</a>
+                <span class="link-sep" aria-hidden="true">|</span>
                 <button id="setUsage" type="button" class="link-btn" title="Sync the monthly counter to the value reported by Google Cloud Console">Set</button>
                 <span class="link-sep" aria-hidden="true">|</span>
                 <button id="resetUsage" type="button" class="link-btn" title="Reset monthly counters">Reset</button>
@@ -159,10 +161,10 @@
               <span class="stat-label">Served from cache</span>
               <span class="stat-value" id="usageSvCached">0</span>
             </div>
-            <div class="stat-row">
-              <span class="stat-label">Geocoding (separate quota)</span>
-              <span class="stat-value" id="usageGeo">0</span>
-            </div>
+            <!-- TODO: geocode counter UI removed for simplicity. Plumbing
+                 (GEOCODE_MSG, lib/usage.js fields, background.js accumulator)
+                 still runs; remove later if it stays unused. -->
+
 
             <div id="overQuotaNotice" class="notice notice-danger" hidden>
               <span class="notice-bullet" aria-hidden="true">&#9679;</span>
@@ -174,17 +176,10 @@
               <span class="notice-text">Google rate-limited the last request. Slowing down&hellip;</span>
             </div>
 
-            <div id="activePagePill" class="page-pill" hidden>
-              <span class="page-pill-label">
-                <span class="status-dot status-dot-ok" aria-hidden="true"></span>
-                Active on this page
-              </span>
-              <span class="page-pill-counter">
-                <span id="sessionSv">0</span> sv &middot;
-                <span id="sessionSvCached">0</span> cached &middot;
-                <span id="sessionGeo">0</span> geo
-              </span>
-            </div>
+            <!-- TODO: "Active on this page" pill removed for simplicity.
+                 background.js still maintains chrome.storage.session.sessionByTab
+                 (network / cached / geocode per tab) — remove that plumbing
+                 later if it stays unused. -->
 
             <!-- Cap row (now inside the disclosure panel) -->
             <label id="capRow" class="cap-row">

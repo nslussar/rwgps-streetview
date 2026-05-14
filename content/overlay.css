@@ -41,10 +41,6 @@
   width: var(--sv-tile-px, 200px);
   height: var(--sv-tile-px, 200px);
   display: block;
-  /* Debug: black border so tile seams are visible. box-sizing keeps the
-     tile-px footprint so layout doesn't shift. Remove once happy. */
-  box-sizing: border-box;
-  border: 1px solid #000;
 }
 #rwgps-sv-overlay .sv-tile-tl { top: 0;                            left: 0; }
 #rwgps-sv-overlay .sv-tile-tm { top: 0;                            left: var(--sv-tile-px, 200px); }

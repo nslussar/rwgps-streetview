@@ -55,15 +55,10 @@ document.addEventListener('DOMContentLoaded', function () {
   var usageBarFill = $('usageBarFill');
   var usageScaleMaxEl = $('usageScaleMax');
   var usageSvCachedEl = $('usageSvCached');
-  var usageGeoEl = $('usageGeo');
   var overCapLabel = $('overCapLabel');
   var overQuotaNotice = $('overQuotaNotice');
   var rateLimitNotice = $('rateLimitNotice');
   var nextResetDateEl = $('nextResetDate');
-  var activePagePill = $('activePagePill');
-  var sessionSvEl = $('sessionSv');
-  var sessionSvCachedEl = $('sessionSvCached');
-  var sessionGeoEl = $('sessionGeo');
   var resetBtn = $('resetUsage');
   var setBtn = $('setUsage');
   var usageEyebrow = $('usageEyebrow');
@@ -105,10 +100,6 @@ document.addEventListener('DOMContentLoaded', function () {
     apiKeyInvalid: false,
     monthSv: 0,
     monthSvCached: 0,
-    monthGeo: 0,
-    sessionSv: 0,
-    sessionSvCached: 0,
-    sessionGeo: 0,
     cap: RwgpsUsage.DEFAULT_CAP,
     capEnabled: true,
     rateLimitedAt: 0,
@@ -116,7 +107,6 @@ document.addEventListener('DOMContentLoaded', function () {
     previewEnabled: true,       // header switch
     openSection: 'usage'        // null | 'usage' | 'advanced'
   };
-  var activeTabId = null;
   var previewMode = null; // 'editor' | 'viewer' | null (content-script reachability)
 
   function fmt(n) { return Number(n || 0).toLocaleString(); }
@@ -248,7 +238,6 @@ document.addEventListener('DOMContentLoaded', function () {
     overCapLabel.hidden = !over;
 
     usageSvCachedEl.textContent = fmt(state.monthSvCached);
-    usageGeoEl.textContent = fmt(state.monthGeo);
 
     overQuotaNotice.hidden = !over;
     if (over) nextResetDateEl.textContent = nextResetLabel();
@@ -256,37 +245,28 @@ document.addEventListener('DOMContentLoaded', function () {
     var rateLimited = !!state.rateLimitedAt &&
       (Date.now() - state.rateLimitedAt) < RATE_LIMIT_WINDOW_MS;
     rateLimitNotice.hidden = over || !rateLimited;
-
-    activePagePill.hidden = over || rateLimited;
-    sessionSvEl.textContent = fmt(state.sessionSv);
-    sessionSvCachedEl.textContent = fmt(state.sessionSvCached);
-    sessionGeoEl.textContent = fmt(state.sessionGeo);
   }
 
+  // TODO: geocode + "Active on this page" UI were removed from the popup for
+  // simplicity. Background.js still tracks per-tab sessionByTab (network /
+  // cached / geocode) and the monthly geocode counter via GEOCODE_MSG. If they
+  // stay unused, remove the plumbing later.
   function applyMonthly(u) {
     if (u && u.month === RwgpsUsage.currentMonth()) {
       state.monthSv = RwgpsUsage.readNetwork(u);
       state.monthSvCached = u.streetviewCached || 0;
-      state.monthGeo = u.geocode || 0;
     } else {
       state.monthSv = 0;
       state.monthSvCached = 0;
-      state.monthGeo = 0;
     }
   }
 
-  function applyTabSession(s) {
-    state.sessionSv = (s && s.network) || 0;
-    state.sessionSvCached = (s && s.cached) || 0;
-    state.sessionGeo = (s && s.geocode) || 0;
-  }
-
-  // Coalesce four independent state reads (sync settings, local counters,
-  // session-per-tab, preview-state round-trip) into one initial render. After
-  // that render commits, drop the .popup-loading class on next frame so the
-  // switch/mode-card transitions only fire for user-driven changes — not for
-  // the storage-to-DOM flip on every popup open.
-  var pendingReads = 4;
+  // Coalesce three independent state reads (sync settings, local counters,
+  // preview-state round-trip) into one initial render. After that render
+  // commits, drop the .popup-loading class on next frame so the switch /
+  // mode-card transitions only fire for user-driven changes — not for the
+  // storage-to-DOM flip on every popup open.
+  var pendingReads = 3;
   function initialReadDone() {
     if (--pendingReads === 0) {
       render();
@@ -354,9 +334,17 @@ document.addEventListener('DOMContentLoaded', function () {
   );
 
   // Mode picker click handlers — both buttons write useExperimentalPreview.
+  // Switching INTO apikey mode also force-opens the Google Maps API section
+  // (overriding any persisted openSection like 'advanced'), so users land on
+  // the usage meter / API key field instead of whatever was open last.
   function setModeFromClick(mode) {
     applyMode(mode);
-    chrome.storage.sync.set({ useExperimentalPreview: state.mode === 'experimental' });
+    var sync = { useExperimentalPreview: state.mode === 'experimental' };
+    if (state.mode === 'apikey') {
+      state.openSection = 'usage';
+      sync.popupOpenSection = 'usage';
+    }
+    chrome.storage.sync.set(sync);
     render();
   }
   modeExperimentalBtn.addEventListener('click', function () { setModeFromClick('experimental'); });
@@ -445,15 +433,6 @@ document.addEventListener('DOMContentLoaded', function () {
     state.apiKeyInvalid = !!result.apiKeyInvalid;
     state.rateLimitedAt = result.rateLimitedAt || 0;
     initialReadDone();
-  });
-
-  chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
-    activeTabId = (tabs[0] && tabs[0].id) || null;
-    chrome.storage.session.get(['sessionByTab'], function (result) {
-      var byTab = result.sessionByTab || {};
-      applyTabSession(activeTabId != null ? byTab[activeTabId] : null);
-      initialReadDone();
-    });
   });
 
   function debounce(fn, ms) {
@@ -669,11 +648,6 @@ document.addEventListener('DOMContentLoaded', function () {
       if (changes.apiUsage) { applyMonthly(changes.apiUsage.newValue); changed = true; }
       if (changes.apiKeyInvalid) { state.apiKeyInvalid = !!changes.apiKeyInvalid.newValue; changed = true; }
       if (changes.rateLimitedAt) { state.rateLimitedAt = changes.rateLimitedAt.newValue || 0; changed = true; }
-    }
-    if (area === 'session' && changes.sessionByTab && activeTabId != null) {
-      var byTab = changes.sessionByTab.newValue || {};
-      applyTabSession(byTab[activeTabId]);
-      changed = true;
     }
     if (changed) render();
   });

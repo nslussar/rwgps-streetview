@@ -409,11 +409,12 @@ body.popup-loading .mode-radio-dot { transition: none !important; }
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
+  text-decoration: none;
 }
 .link-btn:hover { text-decoration: underline; }
 .link-btn-dim { color: var(--dim); }
 
-/* Set/Reset action cluster — two link-btns separated by a "|". */
+/* Cloud Console / Set / Reset action cluster — link-btns separated by "|". */
 .usage-eyebrow-actions {
   display: inline-flex;
   align-items: baseline;
