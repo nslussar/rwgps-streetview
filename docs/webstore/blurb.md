@@ -29,7 +29,9 @@ The extension uses Google's Street View Static API, which requires an API key. R
 Fully open source under MIT license: https://github.com/nslussar/rwgps-streetview
 
 Recent changes:
-* ...
+* Experimental Preview mode (opt-in): no Google Maps API key needed, but limited trails coverage
+* Keyboard shortcuts: `s` toggles the overlay, `v` opens full Street View in new tab
+* UX tweaks, verbose/debug logging toggle
 
 # Permission justification (webstore)
 
